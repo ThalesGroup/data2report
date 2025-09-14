@@ -5,20 +5,23 @@ from typing import Optional
 
 import boto3
 from botocore.config import Config
+from boto3.session import Session
 
 
-def invoke_llm(system_prompt: Optional[str], user_prompt: str, model_id: str) -> str:
+def invoke_llm(
+    system_prompt: Optional[str], user_prompt: str, model_id: str, session: Session
+) -> str:
     logging.info(f"Going to invoke LLM. Model ID: {model_id}")
     prompt = _format_model_body(user_prompt, system_prompt, model_id)
-    response_json = _invoke_bedrock_model(prompt, model_id)
+    response_json = _invoke_bedrock_model(prompt, model_id, session)
     response_text = _get_response_content(response_json, model_id)
     logging.info(f"Got response from LLM. Response length: {len(response_text)}")
     return response_text
 
 
-def _invoke_bedrock_model(prompt_body: dict, model_id: str) -> dict:
+def _invoke_bedrock_model(prompt_body: dict, model_id: str, session: Session) -> dict:
     region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-    bedrock_client = boto3.client(
+    bedrock_client = session.client(
         service_name="bedrock-runtime",
         region_name=region,
         config=Config(read_timeout=300),
