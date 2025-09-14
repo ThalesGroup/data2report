@@ -4,5 +4,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 WORKDIR /app/
 COPY src/. .
-ENV PYTHONPATH "/app"
+ENV PYTHONPATH="/app"
 ENTRYPOINT ["python", "-u", "rest/data2report_rest.py"]
