@@ -1,5 +1,11 @@
+import os
+
 import boto3
 from botocore.exceptions import ClientError
+
+
+def get_reports_bucket() -> str:
+    return os.environ["REPORTS_BUCKET"]
 
 
 def object_exists(bucket: str, key: str, session: boto3.session.Session) -> bool:

@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 
 _PROJECT_FOLDER = Path(os.path.dirname(os.path.abspath(__file__))).parent.absolute()
@@ -17,3 +18,11 @@ def init_env_from_file():
             for line in f:
                 key, value = line.strip().split("=")
                 os.environ[key] = value
+
+
+def get_reports_folder() -> str:
+    return os.environ.get("REPORTS_FOLDER", "/data/data2report/")
+
+
+def get_current_day() -> str:
+    return str(datetime.today().date())
