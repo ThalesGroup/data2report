@@ -14,6 +14,8 @@ Both incremental and parallel modes allow configurable chunk sizes, enabling a b
 
 Deployment options include Docker containers for consistent environments and AWS Lambda for serverless execution.
 
+![data2report logo](data2report.png)
+
 ## Key Features  
 
 ### Flexible Data Input  
