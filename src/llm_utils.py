@@ -3,9 +3,8 @@ import logging
 import os
 from typing import Optional
 
-import boto3
-from botocore.config import Config
 from boto3.session import Session
+from botocore.config import Config
 
 
 def invoke_llm(

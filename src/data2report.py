@@ -2,8 +2,9 @@ import json
 import logging
 import os
 import shutil
-from typing import List, Optional
 
+from chunks_utils import split_input_file
+from conf_utils import validate_configuration
 from utils import get_reports_folder, get_current_day
 
 
@@ -16,6 +17,30 @@ def run_report(
     work_folder: str = None,
     force: bool = False,
 ) -> dict:
+    """
+    Prepares and runs a report based on the provided input file and configuration.
+
+    Args:
+        input_file (str): Path to the input file to process. Can be S3 path or local path. If S3 path, the file will be downloaded to a local temporary folder.
+        for example: s3://my-bucket/path/to/file.csv or /path/to/file.csv
+        report_id (str, optional): Identifier for the report configuration. Either this or `configuration` must be provided.
+        configuration (dict, optional): Report configuration dictionary. Either this or `report_id` must be provided.
+        run_id (str, optional): Unique identifier for this run. If not provided, uses the current day.
+        output_folder (str, optional): Path to the output folder. If not provided, a default path is used.
+        work_folder (str, optional): Path to the working folder, which contains the intermediate data, like reports for chunks. If not provided, a default path is used.
+        force (bool, optional): If True, clears the work folder before running.
+
+    Returns:
+        dict: Dictionary containing paths and statistics:
+            - output_folder (str): Path to the output folder.
+            - work_folder (str): Path to the work folder.
+            - chunks (int): Number of chunks created.
+            - records (int): Number of records processed.
+
+    Raises:
+        ValueError: If required arguments are missing or configuration is invalid.
+        FileNotFoundError: If input or configuration files/folders are missing.
+    """
     if (not report_id and not configuration) or (report_id and configuration):
         raise ValueError("Either report_name or configuration must be provided")
     if not input_file:
@@ -37,7 +62,7 @@ def run_report(
             )
         with open(configuration_file, "r") as f:
             configuration = json.load(f)
-    conf_errors = _validate_configuration(configuration, report_id)
+    conf_errors = validate_configuration(configuration, report_id)
     if len(conf_errors) > 0:
         raise ValueError(f"Invalid report configuration: {conf_errors}")
     if not os.path.exists(reports_folder) or not os.path.isdir(reports_folder):
@@ -61,7 +86,9 @@ def run_report(
         if not os.path.exists(work_folder):
             os.makedirs(work_folder)
     chunk_folder = os.path.join(work_folder, "chunks")
-    chunks, records = _split_input_file(chunk_folder, input_file, configuration)
+    chunks, records = split_input_file(
+        chunk_folder, input_file, configuration["report"]["chunk_size"]
+    )
     logging.info(
         f"Report '{configuration['id']}' run '{run_id}' prepared: {chunks} chunks, {records} records"
     )
@@ -71,36 +98,3 @@ def run_report(
         "chunks": chunks,
         "records": records,
     }
-
-
-def _validate_configuration(configuration: dict, report_id: Optional[str]) -> List[str]:
-    errors = []
-    if "id" not in configuration or not configuration["id"]:
-        errors.append("Missing report id")
-    elif report_id and configuration["id"] != report_id:
-        errors.append(
-            "Report id in configuration does not match the provided report_id"
-        )
-    # TODO: add more validations
-    return errors
-
-
-def _split_input_file(
-    chunk_folder: str, input_file: str, configuration: dict
-) -> (int, int):
-    if not os.path.exists(chunk_folder):
-        os.makedirs(chunk_folder)
-        chunks = 0
-    else:
-        chunks = len(os.listdir(chunk_folder))
-    if chunks > 0:
-        return chunks, None
-    chunk_size = configuration["report"]["chunk_size"]
-    records = 0
-    with open(input_file, "r") as f:
-        for _ in f:
-            if records % chunk_size == 0:
-                chunks += 1
-                # TODO write chunk (gz file). If s3 path, upload to s3
-            records += 1
-    return chunks, records

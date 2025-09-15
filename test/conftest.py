@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import tempfile
@@ -28,3 +29,13 @@ def empty_file() -> Generator[str, None, None]:
         with open(f.name, "w") as _:
             pass
         yield f.name
+
+
+@pytest.fixture
+def csv_file_with_1k_lines() -> Generator[str, None, None]:
+    with tempfile.NamedTemporaryFile() as temp_f:
+        with open(temp_f.name, "w") as open_f:
+            writer = csv.DictWriter(open_f, fieldnames=["id", "name", "value"])
+            for i in range(1000):
+                writer.writerow({"id": i, "name": f"name_{i}", "value": f"value_{i}"})
+        yield temp_f.name

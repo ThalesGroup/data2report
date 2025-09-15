@@ -9,6 +9,7 @@
   },
   "report": {
     "chunk_size": 10,
-    "incremental": true
+    "incremental": true,
+    "max_workers": 1
   }
 }
