@@ -1,28 +1,9 @@
 import unittest
 
 from conf_utils import validate_configuration
+from conftest import get_config
 
-VALID_CONFIGURATION = {
-    "id": "test_report",
-    "name": "Test Report",
-    "llm": {
-        "model_id": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-        "system_prompt": (
-            "Analyze my data and return the most interesting findings. "
-            "Output should be in JSONL format with the following fields: "
-            "start_time, end_time, finding_title, description. "
-            "Ensure the JSONL is well-formed.\n"
-            "Current findings: {findings}\nData: {data}"
-        ),
-        "temperature": 0.3,
-        "max_tokens": 1_000,
-    },
-    "report": {
-        "chunk_size": 10,
-        "incremental": True,
-        "max_workers": 1,
-    },
-}
+VALID_CONFIGURATION = get_config("test_report")
 
 
 class TestValidateConfiguration(unittest.TestCase):
