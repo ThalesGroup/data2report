@@ -10,5 +10,7 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
             "Report id in configuration does not match the provided report_id"
         )
     # TODO: add more validations
+    if "llm" not in configuration:
+        errors.append("Missing 'llm' section in configuration")
     # for example max_workers for incremental report must be 1, chunk_size, etc.
     return errors
