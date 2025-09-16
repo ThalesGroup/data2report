@@ -16,6 +16,7 @@ def run_report(
     output_folder: str = None,
     work_folder: str = None,
     force: bool = False,
+    max_records: int = None,
 ) -> dict:
     """
     Prepares and runs a report based on the provided input file and configuration.
@@ -29,6 +30,7 @@ def run_report(
         output_folder (str, optional): Path to the output folder. If not provided, a default path is used.
         work_folder (str, optional): Path to the working folder, which contains the intermediate data, like reports for chunks. If not provided, a default path is used.
         force (bool, optional): If True, clears the work folder before running.
+        max_records (int, optional): Maximum number of records to process from the input file. If not provided, all records are processed.
 
     Returns:
         dict: Dictionary containing paths and statistics:
@@ -86,6 +88,7 @@ def run_report(
         if not os.path.exists(work_folder):
             os.makedirs(work_folder)
     chunk_folder = os.path.join(work_folder, "chunks")
+    # TODO send max records to split_input_file
     chunks, records = split_input_file(
         chunk_folder, input_file, configuration["report"]["chunk_size"]
     )
@@ -97,4 +100,5 @@ def run_report(
         "work_folder": work_folder,
         "chunks": chunks,
         "records": records,
+        "records_limit_reached": max_records is not None and records >= max_records,
     }
