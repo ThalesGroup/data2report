@@ -7,10 +7,17 @@ from botocore.config import Config
 
 
 def invoke_llm(
-    system_prompt: str, user_prompt: str, model_id: str, session: Session
+    system_prompt: str,
+    user_prompt: str,
+    model_id: str,
+    max_tokens: int,
+    temperature: float,
+    session: Session,
 ) -> dict:
     logging.info(f"Going to invoke LLM. Model ID: {model_id}")
-    prompt = _format_model_body(system_prompt, user_prompt, model_id)
+    prompt = _format_model_body(
+        system_prompt, user_prompt, model_id, max_tokens, temperature
+    )
     response_json = _invoke_bedrock_model(prompt, model_id, session)
     response_text = _get_response_content(response_json, model_id)
     usage = _get_response_usage(response_json, model_id)
@@ -32,7 +39,13 @@ def _invoke_bedrock_model(prompt_body: dict, model_id: str, session: Session) ->
     return json.loads(response.get("body").read())
 
 
-def _format_model_body(system_prompt: str, user_prompt: str, model_id: str) -> dict:
+def _format_model_body(
+    system_prompt: str,
+    user_prompt: str,
+    model_id: str,
+    max_tokens: int,
+    temperature: float,
+) -> dict:
     if "claude" in model_id:
         body = {
             "anthropic_version": "bedrock-2023-05-31",
@@ -43,8 +56,8 @@ def _format_model_body(system_prompt: str, user_prompt: str, model_id: str) -> d
                     "content": user_prompt,
                 }
             ],
-            "max_tokens": 2000,
-            "temperature": 0.0,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
         }
     elif "jamba" in model_id:
         body = {
@@ -55,7 +68,30 @@ def _format_model_body(system_prompt: str, user_prompt: str, model_id: str) -> d
             "n": 1,
         }
     elif "titan" in model_id:
-        body = {"inputText": f"{system_prompt}\n\n{user_prompt}"}
+        body = {
+            "inputText": f"{system_prompt}\n\n{user_prompt}",
+            "textGenerationConfig": {
+                "maxTokenCount": max_tokens,
+                "temperature": temperature,
+            },
+        }
+    elif "nova" in model_id:
+        body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"text": user_prompt}],
+                },
+                {
+                    "role": "assistant",
+                    "content": [{"text": system_prompt}],
+                },
+            ],
+            "inferenceConfig": {
+                "maxTokens": max_tokens,
+                "temperature": temperature,
+            },
+        }
     else:
         raise ValueError(f"Unknown model_id: {model_id}")
     return body
@@ -68,6 +104,8 @@ def _get_response_content(response_json: dict, model_id: str) -> str:
         return response_json["choices"][0]["message"]["content"]
     elif "titan" in model_id:
         return response_json["results"][0]["outputText"]
+    elif "nova" in model_id:
+        return response_json["output"]["message"]["content"][0]["text"]
     else:
         raise ValueError(f"Unknown model_id: {model_id}")
 
@@ -87,6 +125,11 @@ def _get_response_usage(response_json: dict, model_id: str) -> dict:
         return {
             "input_tokens": response_json["inputTextTokenCount"],
             "output_tokens": response_json["results"][0]["tokenCount"],
+        }
+    elif "nova" in model_id:
+        return {
+            "input_tokens": response_json["usage"]["inputTokens"],
+            "output_tokens": response_json["usage"]["outputTokens"],
         }
     else:
         raise ValueError(f"Unknown model_id: {model_id}")

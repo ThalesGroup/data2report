@@ -20,6 +20,8 @@ def set_aws_api_key():
         "anthropic.claude-3-5-sonnet-20240620-v1:0",
         "ai21.jamba-1-5-mini-v1:0",
         "amazon.titan-text-lite-v1",
+        "amazon.nova-lite-v1:0",
+        "amazon.nova-micro-v1:0",
     ],
 )
 def test_connect_to_bedrock(model_id: str):
@@ -29,6 +31,8 @@ def test_connect_to_bedrock(model_id: str):
         "you are a helpful assistant who answer questions",
         question,
         model_id=model_id,
+        max_tokens=100,
+        temperature=0.0,
         session=session,
     )
     assert response["usage"]["input_tokens"] >= 5
