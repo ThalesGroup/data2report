@@ -32,3 +32,40 @@ class TestValidateConfiguration:
         cfg = valid_configuration
         cfg["llm"] = {}
         assert "Missing 'llm' section in configuration" not in validate_configuration(cfg, None)
+
+    def test_missing_model_id(self, valid_configuration):
+        cfg = {**valid_configuration}
+        cfg["llm"].pop("model_id")
+        assert "llm.model_id is required" in validate_configuration(cfg, None)
+
+    def test_bad_temperature(self, valid_configuration):
+        cfg = {**valid_configuration}
+        cfg["llm"]["temperature"] = 1.5
+        assert "llm.temperature must be between 0 and 1" in \
+               validate_configuration(cfg, None)
+
+    def test_negative_max_tokens(self, valid_configuration):
+        cfg = {**valid_configuration}
+        cfg["llm"]["max_tokens"] = -10
+        assert "llm.max_tokens must be a positive integer" in \
+               validate_configuration(cfg, None)
+
+    def test_negative_chunk_size(self, valid_configuration):
+        cfg = {**valid_configuration}
+        cfg["report"]["chunk_size"] = -5
+        assert "report.chunk_size must be a positive integer" in \
+               validate_configuration(cfg, None)
+
+    def test_incremental_workers_gt1(self, valid_configuration):
+        cfg = {**valid_configuration}
+        cfg["report"]["incremental"] = True
+        cfg["report"]["max_workers"] = 2
+        assert "For incremental mode, report.max_workers must be 1" in \
+               validate_configuration(cfg, None)
+
+    def test_parallel_workers_lt1(self, valid_configuration):
+        cfg = {**valid_configuration}
+        cfg["report"]["incremental"] = False
+        cfg["report"]["max_workers"] = 0
+        assert "report.max_workers must be >=1" in \
+               validate_configuration(cfg, None)
