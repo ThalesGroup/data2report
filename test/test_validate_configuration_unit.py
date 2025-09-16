@@ -1,37 +1,34 @@
-import unittest
+import pytest
 
 from conf_utils import validate_configuration
 from conftest import get_config
 
-VALID_CONFIGURATION = get_config("test_report")
+@pytest.fixture
+def valid_configuration() -> dict:
+    return get_config("test_report")
 
+class TestValidateConfiguration:
+    def test_valid_without_report_id(self, valid_configuration):
+        assert validate_configuration(valid_configuration, None) == []
 
-class TestValidateConfiguration(unittest.TestCase):
-    def test_valid_without_report_id(self):
-        self.assertEqual(validate_configuration(VALID_CONFIGURATION, None), [])
-
-    def test_valid_with_matching_report_id(self):
-        self.assertEqual(
-            validate_configuration(VALID_CONFIGURATION, "test_report"), []
-        )
-
-    def test_missing_id_field(self):
-        cfg = {**VALID_CONFIGURATION}
+    def test_missing_id_field(self, valid_configuration):
+        cfg = {**valid_configuration}
         cfg.pop("id")
-        self.assertIn(
-            "Missing report id",
-            validate_configuration(cfg, None),
-        )
+        assert "Missing report id" in validate_configuration(cfg, None)
 
-    def test_empty_id_value(self):
-        cfg = {**VALID_CONFIGURATION, "id": ""}
-        self.assertIn(
-            "Missing report id",
-            validate_configuration(cfg, None),
-        )
+    def test_empty_id_value(self, valid_configuration):
+        cfg = {**valid_configuration, "id": ""}
+        assert "Missing report id" in validate_configuration(cfg, None)
 
-    def test_mismatched_report_id(self):
-        self.assertIn(
-            "Report id in configuration does not match the provided report_id",
-            validate_configuration(VALID_CONFIGURATION, "wrong_id"),
-        )
+    def test_mismatched_report_id(self, valid_configuration):
+        assert "Report id in configuration does not match the provided report_id" in validate_configuration(valid_configuration, "wrong_id")
+
+    def test_missing_llm_section(self, valid_configuration):
+        cfg = valid_configuration
+        cfg.pop("llm")
+        assert "Missing 'llm' section in configuration" in validate_configuration(cfg, None)
+
+    def test_empty_llm_section(self, valid_configuration):
+        cfg = valid_configuration
+        cfg["llm"] = {}
+        assert "Missing 'llm' section in configuration" not in validate_configuration(cfg, None)
