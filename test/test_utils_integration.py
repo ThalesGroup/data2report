@@ -17,20 +17,23 @@ def set_aws_api_key():
     "model_id",
     [
         "anthropic.claude-3-haiku-20240307-v1:0",
-        "anthropic.claude-3-sonnet-20240229-v1:0",
         "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "ai21.jamba-1-5-mini-v1:0",
+        "amazon.titan-text-lite-v1",
     ],
 )
 def test_connect_to_bedrock(model_id: str):
     session = Session()
     question = "What is the capital of Japan?"
-    answer = invoke_llm(
+    response = invoke_llm(
         "you are a helpful assistant who answer questions",
         question,
         model_id=model_id,
         session=session,
     )
-    assert "Tokyo" in answer
+    assert response["usage"]["input_tokens"] >= 5
+    assert response["usage"]["output_tokens"] >= 1
+    assert "Tokyo" in response["content"], response
 
 
 def test_object_exists():
