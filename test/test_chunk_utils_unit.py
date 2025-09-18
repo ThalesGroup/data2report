@@ -19,7 +19,9 @@ def test_csv_chunk_sizes(csv_file_with_1k_lines, tmp_path):
 
         assert records == 1_000
         assert chunks == expected
-        assert len([f for f in os.listdir(out_dir) if f.endswith(".csv.gz")]) == expected
+        assert (
+            len([f for f in os.listdir(out_dir) if f.endswith(".csv.gz")]) == expected
+        )
 
         for f in out_dir.iterdir():
             assert _lines_in_gz(f) <= size
@@ -27,12 +29,17 @@ def test_csv_chunk_sizes(csv_file_with_1k_lines, tmp_path):
 
 def test_max_records_limit(csv_file_with_1k_lines, tmp_path):
     out_dir = tmp_path / "limited"
-    chunks, records = split_input_file(str(out_dir), csv_file_with_1k_lines, 100, max_records=350)
+    chunks, records = split_input_file(
+        str(out_dir), csv_file_with_1k_lines, 100, max_records=350
+    )
 
     assert records == 350
     expected_chunks = math.ceil(350 / 100)
     assert chunks == expected_chunks
-    assert len([f for f in os.listdir(out_dir) if f.endswith(".csv.gz")]) == expected_chunks
+    assert (
+        len([f for f in os.listdir(out_dir) if f.endswith(".csv.gz")])
+        == expected_chunks
+    )
 
     total = sum(_lines_in_gz(f) for f in out_dir.iterdir())
     assert total == 350
@@ -78,7 +85,9 @@ def test_invalid_chunk_size(csv_file_with_1k_lines, tmp_path):
 def test_single_record_chunks(csv_file_with_1k_lines, tmp_path):
     """Test edge case of chunk_size=1."""
     out_dir = tmp_path / "single_record"
-    chunks, records = split_input_file(str(out_dir), csv_file_with_1k_lines, 1, max_records=5)
+    chunks, records = split_input_file(
+        str(out_dir), csv_file_with_1k_lines, 1, max_records=5
+    )
 
     assert chunks == 5
     assert records == 5
