@@ -148,3 +148,20 @@ def test_bad_lines_skipped_and_logged(tmp_path, caplog):
 
     assert recs == 3
     assert "Skipped 1 bad lines" in " ".join(caplog.messages)
+
+
+def test_bad_lines_skipped_and_logged_jsonl(tmp_path, caplog):
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text(
+        '{"id": 1, "name": "ok"}\n' "NOT_A_JSON\n" '{"id": 2, "name": "still_ok"}\n',
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING):
+        chunks, recs = split_input_file(
+            str(tmp_path / "bad_jsonl_chunks"), str(bad), chunk_size=2
+        )
+
+    assert chunks == 1
+    assert recs == 2
+    assert "Skipped 1 bad lines" in " ".join(caplog.messages)
