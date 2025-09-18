@@ -1,3 +1,4 @@
+import logging
 import os
 import gzip
 import math
@@ -94,3 +95,56 @@ def test_single_record_chunks(csv_file_with_1k_lines, tmp_path):
 
     for f in out_dir.iterdir():
         assert _lines_in_gz(f) == 1
+
+
+def test_csv_header_propagation(csv_file_with_1k_lines, tmp_path):
+    with open(csv_file_with_1k_lines, "r+", encoding="utf-8") as fh:
+        body = fh.read()
+        fh.seek(0)
+        fh.write("id,name,value\n" + body)
+
+    out_dir = tmp_path / "header"
+    split_input_file(str(out_dir), csv_file_with_1k_lines, 200, header=True)
+
+    for f in out_dir.iterdir():
+        with gzip.open(f, "rt", encoding="utf-8") as zf:
+            assert zf.readline().strip() == "id,name,value"
+
+
+def test_jsonl_and_jsonl_gz(csv_file_with_1k_lines, tmp_path):
+    jsonl = str(tmp_path / "data.jsonl")
+    with open(csv_file_with_1k_lines, "r", encoding="utf-8") as src, open(
+        jsonl, "w", encoding="utf-8"
+    ) as dst:
+        for ln in src:
+            i, n, v = ln.strip().split(",")
+            dst.write(f'{{"id":{i},"name":"{n}","value":"{v}"}}\n')
+
+    c, r = split_input_file(str(tmp_path / "jsonl"), jsonl, 100)
+    assert (c, r) == (10, 1_000)
+
+    gz_jsonl = str(tmp_path / "data.jsonl.gz")
+    with open(jsonl, "rb") as src, gzip.open(gz_jsonl, "wb") as dst:
+        dst.writelines(src)
+    c_gz, r_gz = split_input_file(str(tmp_path / "jsonl_gz"), gz_jsonl, 100)
+    assert (c_gz, r_gz) == (10, 1_000)
+
+
+def test_bad_lines_skipped_and_logged(tmp_path, caplog):
+    bad = tmp_path / "bad.csv"
+    bad.write_text(
+        "id,name,value\n"
+        "1,good,line\n"
+        "badlinewithoutcomma\n"
+        ",missingstart\n"
+        "2,another,good\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING):
+        chunks, recs = split_input_file(
+            str(tmp_path / "bad_chunks"), str(bad), 10, header=True
+        )
+
+    assert recs == 3
+    assert "Skipped 1 bad lines" in " ".join(caplog.messages)
