@@ -5,6 +5,10 @@ import shutil
 
 from chunks_utils import split_input_file
 from conf_utils import validate_configuration
+from report_processing import (
+    process_chunks_folder,
+    process_final_report,
+)
 from utils import get_reports_folder, get_current_day
 
 
@@ -73,13 +77,13 @@ def run_report(
         run_id = get_current_day()
     if not output_folder:
         output_folder = os.path.join(
-            reports_folder, "reports", "report=", configuration["id"], f"run={run_id}"
+            reports_folder, "reports", f"report={configuration['id']}", f"run={run_id}"
         )
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
     if not work_folder:
         work_folder = os.path.join(
-            reports_folder, "work", "report=", configuration["id"], f"run={run_id}"
+            reports_folder, "work", f"report={configuration['id']}", f"run={run_id}"
         )
         if force:
             # TODO if s3 path, clear s3 folder
@@ -87,18 +91,41 @@ def run_report(
             logging.info(f"Work folder '{work_folder}' cleared")
         if not os.path.exists(work_folder):
             os.makedirs(work_folder)
-    chunk_folder = os.path.join(work_folder, "chunks")
-    # TODO send max records to split_input_file
+    chunks_folder = os.path.join(work_folder, "chunks")
     chunks, records = split_input_file(
-        chunk_folder, input_file, configuration["report"]["chunk_size"]
+        chunks_folder,
+        input_file,
+        configuration["report"]["chunk_size"],
+        max_records,
+        input_format=configuration["report"].get("input", {}).get("format"),
+        header=configuration.get("header", False),
     )
     logging.info(
         f"Report '{configuration['id']}' run '{run_id}' prepared: {chunks} chunks, {records} records"
     )
-    return {
+    report_chunks_folder = os.path.join(work_folder, "chunk_reports")
+    process_result = process_chunks_folder(
+        chunks_folder, configuration["llm"], report_chunks_folder
+    )
+    llm_usage = process_result["llm_usage"]
+    final_report_file = os.path.join(output_folder, "final_report.gz")
+    final_result = process_final_report(
+        report_chunks_folder,
+        final_report_file,
+        configuration["llm"],
+        configuration["report"],
+    )
+    if "llm_usage" in final_result:
+        llm_usage["input_tokens"] += final_result["llm_usage"].get("input_tokens", 0)
+        llm_usage["output_tokens"] += final_result["llm_usage"].get("output_tokens", 0)
+    result = {
         "output_folder": output_folder,
         "work_folder": work_folder,
         "chunks": chunks,
         "records": records,
         "records_limit_reached": max_records is not None and records >= max_records,
+        "llm_usage": process_result["llm_usage"],
+        "chunks_skipped": process_result["chunks_skipped"],
     }
+    logging.info("Report processing completed. Result: " + str(result))
+    return result

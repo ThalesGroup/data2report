@@ -39,3 +39,14 @@ def csv_file_with_1k_lines() -> Generator[str, None, None]:
             for i in range(1000):
                 writer.writerow({"id": i, "name": f"name_{i}", "value": f"value_{i}"})
         yield temp_f.name
+
+
+@pytest.fixture
+def report_for_analytics() -> Generator[str, None, None]:
+    with tempfile.NamedTemporaryFile() as temp_f:
+        with open(temp_f.name, "w") as open_f:
+            writer = csv.DictWriter(open_f, fieldnames=["id", "value"])
+            for i in range(10):
+                for j in range(100):
+                    writer.writerow({"id": i, "value": j})
+        yield temp_f.name

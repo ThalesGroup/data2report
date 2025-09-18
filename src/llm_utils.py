@@ -12,12 +12,14 @@ def invoke_llm(
     model_id: str,
     max_tokens: int,
     temperature: float,
-    session: Session,
+    session: Session = None,
 ) -> dict:
     logging.info(f"Going to invoke LLM. Model ID: {model_id}")
     prompt = _format_model_body(
         system_prompt, user_prompt, model_id, max_tokens, temperature
     )
+    if session is None:
+        session = Session()
     response_json = _invoke_bedrock_model(prompt, model_id, session)
     response_text = _get_response_content(response_json, model_id)
     usage = _get_response_usage(response_json, model_id)

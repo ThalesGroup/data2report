@@ -19,6 +19,7 @@ def split_input_file(
     input_file: str,
     chunk_size: int,
     max_records: int = None,
+    input_format: str = None,
     header: bool = False,
 ) -> (int, int):
     """
@@ -29,6 +30,7 @@ def split_input_file(
             input_file (str): Path to the input file to split. Can be a text file or a gzipped (.gz) file.
             chunk_size (int): Number of records per chunk.
             max_records (int): if the limit is defined and reached, stop processing records
+            input_format (str): 'jsonl' or 'csv'. If None, inferred from file extension.
             header (bool): if True, the first line is treated as a CSV header and written at the top of every chunk.
 
         Returns:
@@ -50,7 +52,11 @@ def split_input_file(
     else:
         os.makedirs(chunk_folder, exist_ok=True)
 
-    is_jsonl = input_file.endswith(".jsonl") or input_file.endswith(".jsonl.gz")
+    is_jsonl = (
+        input_format == "jsonl"
+        or input_file.endswith(".jsonl")
+        or input_file.endswith(".jsonl.gz")
+    )
     chunks = records = bad_lines = 0
     out_f: TextIO | None = None
     header_line: str | None = None

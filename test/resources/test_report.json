@@ -1,6 +1,10 @@
 {
   "id": "test_report",
   "name": "Test Report",
+  "input": {
+    "format": "csv",
+    "header": true
+  },
   "llm": {
     "model_id": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "system_prompt": "Analyze my data and return the most interesting findings. Output should be in JSONL format with the following fields: start_time, end_time, finding_title, description. Ensure the JSONL is well-formed.\nCurrent findings: {findings}\nData: {data}",
@@ -8,7 +12,7 @@
     "max_tokens": 1000
   },
   "report": {
-    "chunk_size": 10,
+    "chunk_size": 500,
     "incremental": true,
     "max_workers": 1
   }
