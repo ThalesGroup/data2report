@@ -1,0 +1,23 @@
+<html>
+    <body>
+        <h2>Run Report</h2>
+        <form id="reportForm" action="/report" method="post" enctype="multipart/form-data">
+            <label for="config">Configuration:</label><br>
+            <textarea id="config" name="config" rows="10" cols="50"></textarea><br><br>
+            <label for="file">Choose file:</label>
+            <input type="file" id="file" name="file"><br><br>
+            <input type="submit" value="Run Report">
+        </form>
+        <script>
+            document.getElementById('reportForm').addEventListener('submit', function(event) {
+                const configText = document.getElementById('config').value;
+                try {
+                    JSON.parse(configText);
+                } catch (e) {
+                    alert('Configuration must be valid JSON.');
+                    event.preventDefault();
+                }
+            });
+        </script>
+    </body>
+</html>
