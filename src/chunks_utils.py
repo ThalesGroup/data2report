@@ -1,4 +1,5 @@
 import gzip
+import json
 import logging
 import os
 from typing import TextIO
@@ -85,9 +86,16 @@ def split_input_file(
                 if not line.strip():  # skip empty lines
                     continue
 
-                if not is_jsonl and line.count(",") < 1:  # CSV validation
-                    bad_lines += 1
-                    continue
+                if is_jsonl:
+                    try:
+                        json.loads(line)  # validate JSON
+                    except json.JSONDecodeError:
+                        bad_lines += 1
+                        continue
+                else:
+                    if line.count(",") < 1:  # CSV validation
+                        bad_lines += 1
+                        continue
 
                 out_f.write(line)
                 records += 1
