@@ -92,6 +92,8 @@ def run_report(
         if not os.path.exists(work_folder):
             os.makedirs(work_folder)
     chunks_folder = os.path.join(work_folder, "chunks")
+    if not max_records:
+        max_records = configuration["report"].get("max_records")
     chunks, records = split_input_file(
         chunks_folder,
         input_file,
@@ -105,7 +107,10 @@ def run_report(
     )
     report_chunks_folder = os.path.join(work_folder, "chunk_reports")
     process_result = process_chunks_folder(
-        chunks_folder, configuration["llm"], report_chunks_folder
+        chunks_folder,
+        configuration["llm"],
+        configuration["report"],
+        report_chunks_folder,
     )
     llm_usage = process_result["llm_usage"]
     final_report_file = os.path.join(output_folder, "final_report.gz")
@@ -127,5 +132,7 @@ def run_report(
         "llm_usage": process_result["llm_usage"],
         "chunks_skipped": process_result["chunks_skipped"],
     }
+    with open(os.path.join(output_folder, "result.json"), "w") as f:
+        json.dump(result, f, indent=2)
     logging.info("Report processing completed. Result: " + str(result))
     return result

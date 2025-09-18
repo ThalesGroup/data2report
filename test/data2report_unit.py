@@ -1,8 +1,8 @@
-import logging
+import os
+from unittest.mock import patch
 
 from conftest import get_config
 from data2report import run_report
-from unittest.mock import patch
 
 
 def test_generate_empty_report(reports_folder, empty_file):
@@ -30,3 +30,6 @@ def test_generate_report(reports_folder, csv_file_with_1k_lines):
         assert result["records"] == 1000
         assert result["llm_usage"]["input_tokens"] == 20
         assert result["llm_usage"]["output_tokens"] == 40
+        assert os.path.exists(result["output_folder"])
+        assert os.path.exists(os.path.join(result["output_folder"], "final_report.gz"))
+        assert os.path.exists(os.path.join(result["output_folder"], "result.json"))

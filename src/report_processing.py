@@ -9,8 +9,8 @@ from llm_utils import invoke_llm
 def process_chunks_folder(
     chunks_folder: str,
     llm_config: dict,
+    report_config: dict,
     chunked_reports_folder: str,
-    max_workers: int = 1,
 ) -> dict:
     if not os.path.exists(chunked_reports_folder):
         os.makedirs(chunked_reports_folder)
@@ -20,9 +20,11 @@ def process_chunks_folder(
     }
     exists = 0
     chunk_files = os.listdir(chunks_folder)
+    max_workers = report_config.get("max_workers", 1)
     logging.info(
         f"Going to process {len(chunk_files)} chunks. Max workers: {max_workers}"
     )
+    prev_report_file = None
     for chunk_idx, chunk_file in enumerate(chunk_files):
         report_file = os.path.join(
             chunked_reports_folder, f"chunk_{chunk_idx + 1}_report.gz"
@@ -31,8 +33,13 @@ def process_chunks_folder(
             f"Processing chunk {chunk_idx + 1}/{len(chunk_files)}: {chunk_file}"
         )
         process_result = _process_report(
-            os.path.join(chunks_folder, chunk_file), llm_config, report_file
+            os.path.join(chunks_folder, chunk_file),
+            llm_config,
+            report_file,
+            prev_report_file,
         )
+        if report_config["incremental"]:
+            prev_report_file = report_file
         llm_usage["input_tokens"] += process_result["usage"].get("input_tokens", 0)
         llm_usage["output_tokens"] += process_result["usage"].get("output_tokens", 0)
         if process_result["exists"]:
@@ -72,7 +79,9 @@ def process_final_report(
     return result
 
 
-def _process_report(input_file: str, llm_config: dict, output_file: str) -> dict:
+def _process_report(
+    input_file: str, llm_config: dict, output_file: str, prev_report_file: str = None
+) -> dict:
     exists = os.path.exists(output_file)
     if exists:
         logging.info(
@@ -81,6 +90,11 @@ def _process_report(input_file: str, llm_config: dict, output_file: str) -> dict
         usage = {"input_tokens": 0, "output_tokens": 0}
     else:
         prompt_data = _file_to_prompt_data(input_file)
+        if prev_report_file and os.path.exists(prev_report_file):
+            prev_report_data = _file_to_prompt_data(prev_report_file)
+            prompt_data = (
+                f"\nPrevious findings:\n{prev_report_data}\n\nNew data:\n{prompt_data}"
+            )
         llm_result = invoke_llm(
             llm_config["system_prompt"],
             prompt_data,
