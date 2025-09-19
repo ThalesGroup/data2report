@@ -1,23 +1,434 @@
-<html>
-    <body>
-        <h2>Run Report</h2>
-        <form id="reportForm" action="/report" method="post" enctype="multipart/form-data">
-            <label for="config">Configuration:</label><br>
-            <textarea id="config" name="config" rows="10" cols="50"></textarea><br><br>
-            <label for="file">Choose file:</label>
-            <input type="file" id="file" name="file"><br><br>
-            <input type="submit" value="Run Report">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>data2report • Run Report</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --card: #111834;
+        --muted: #6c7aa0;
+        --text: #e9eefc;
+        --primary: #4c8dff;
+        --primary-700: #2f66cc;
+        --ok: #14b8a6;
+        --warn: #f59e0b;
+        --err: #ef4444;
+        --border: #223055;
+        --chip: #1a2547;
+      }
+      * { box-sizing: border-box }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+        background: linear-gradient(180deg, #0b1020 0%, #0a0f1c 100%);
+        color: var(--text);
+      }
+      .container {
+        padding: 24px;
+        max-width: 900px;
+        margin: 40px auto;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        overflow: hidden;
+      }
+      .card-header {
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        background: linear-gradient(135deg, var(--primary), #7aa8ff);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #081027;
+        font-weight: 800;
+      }
+      .title {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0.2px;
+      }
+      .sub {
+        margin: 2px 0 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        padding: 18px;
+      }
+      @media (max-width: 880px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      label {
+        font-weight: 600;
+        font-size: 13px;
+        color: #cfd8ff;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      textarea, input[type="file"], select, input[type="number"] {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #0d1430;
+        color: var(--text);
+        outline: none;
+        transition: border-color .15s ease, box-shadow .15s ease;
+      }
+      textarea:focus, input[type="file"]:focus, select:focus, input[type="number"]:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(76,141,255,0.15);
+      }
+      textarea {
+        min-height: 260px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        resize: vertical;
+        tab-size: 2;
+        white-space: pre;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .btn {
+        appearance: none;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        color: #06112b;
+        background: var(--primary);
+        font-weight: 700;
+        transition: transform .04s ease, background .15s ease;
+      }
+      .btn:hover { background: var(--primary-700); }
+      .btn:active { transform: translateY(1px); }
+      .btn.ghost {
+        background: #132048;
+        color: #cfe0ff;
+        border: 1px solid var(--border);
+      }
+      .dropzone {
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        border: 2px dashed var(--border);
+        border-radius: 12px;
+        background: #0b1330;
+        color: var(--muted);
+        text-align: center;
+        transition: border-color .15s ease, background .15s ease;
+        cursor: pointer;
+      }
+      .dropzone.dragover {
+        border-color: var(--primary);
+        background: #0c1740;
+      }
+      .chips {
+        display: flex; gap: 8px; flex-wrap: wrap;
+      }
+      .chip {
+        background: var(--chip);
+        border: 1px solid var(--border);
+        padding: 6px 10px;
+        border-radius: 100px;
+        font-size: 12px;
+        color: #cfd8ff;
+      }
+      .footer {
+        padding: 14px 18px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .progress {
+        flex: 1 1 240px;
+        background: #0a1230;
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        overflow: hidden;
+      }
+      .bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--primary), #7aa8ff);
+        transition: width .25s ease;
+      }
+      .status {
+        font-size: 12px; color: var(--muted);
+      }
+      .result {
+        margin-top: 16px;
+        background: #0c1738;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .result pre {
+        margin: 0;
+        max-height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+      }
+      .row { display: flex; gap: 10px; align-items: center; }
+      .row > * { flex: 1; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card" role="region" aria-label="Run Report form">
+        <div class="card-header">
+          <div class="logo" aria-hidden="true">D2</div>
+          <div>
+            <h1 class="title">Run Report</h1>
+            <p class="sub">Upload data and a JSON configuration to generate a report</p>
+          </div>
+        </div>
+
+        <form id="reportForm" action="/report" method="post" enctype="multipart/form-data" novalidate>
+          <div class="grid">
+            <div class="field">
+              <label for="config">Configuration JSON</label>
+              <div class="toolbar">
+                <button type="button" class="btn ghost" id="btnFormat">Format</button>
+                <button type="button" class="btn ghost" id="btnExample">Load example</button>
+              </div>
+              <textarea id="config" name="config" placeholder='{"id":"report_id", ...}' aria-describedby="configHint"></textarea>
+              <div id="configHint" class="hint">Press “Format” to pretty-print and validate JSON</div>
+              <div class="chips" id="lintChips" aria-live="polite"></div>
+            </div>
+
+            <div class="field">
+              <label for="file">Data file</label>
+              <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Drop or choose a CSV or JSONL file">
+                <div>
+                  <div style="font-weight:700;color:#d7e3ff">Drag & drop</div>
+                  <div class="hint">CSV, JSONL, or compressed (.gz)</div>
+                </div>
+              </div>
+              <input type="file" id="file" name="file" accept=".csv,.jsonl,.gz,text/csv,application/gzip" style="display:none" />
+              <div class="row">
+                <div class="field">
+                  <label for="chunkSize">Chunk size</label>
+                  <input type="number" id="chunkSize" name="chunk_size" min="1" step="1" placeholder="e.g. 1000" />
+                </div>
+                <div class="field">
+                  <label for="maxRecords">Max records (optional)</label>
+                  <input type="number" id="maxRecords" name="max_records" min="1" step="1" placeholder="no limit" />
+                </div>
+              </div>
+              <div class="row">
+                <button type="submit" class="btn">Run report</button>
+                <button type="button" class="btn ghost" id="btnClear">Clear</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+            <div class="status" id="status">Idle</div>
+          </div>
+
+          <div class="result" id="result" hidden>
+            <div class="row" style="margin-bottom:8px">
+              <strong>Response</strong>
+              <div style="display:flex; gap:8px; justify-content:flex-end">
+                <button type="button" class="btn ghost" id="btnCopy">Copy</button>
+                <button type="button" class="btn ghost" id="btnDownload">Download</button>
+              </div>
+            </div>
+            <pre id="resultPre"></pre>
+          </div>
         </form>
-        <script>
-            document.getElementById('reportForm').addEventListener('submit', function(event) {
-                const configText = document.getElementById('config').value;
-                try {
-                    JSON.parse(configText);
-                } catch (e) {
-                    alert('Configuration must be valid JSON.');
-                    event.preventDefault();
-                }
-            });
-        </script>
-    </body>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById('reportForm');
+      const configEl = document.getElementById('config');
+      const lintChips = document.getElementById('lintChips');
+      const dropzone = document.getElementById('dropzone');
+      const fileInput = document.getElementById('file');
+      const bar = document.getElementById('bar');
+      const statusEl = document.getElementById('status');
+      const resultBox = document.getElementById('result');
+      const resultPre = document.getElementById('resultPre');
+
+      const btnFormat = document.getElementById('btnFormat');
+      const btnExample = document.getElementById('btnExample');
+      const btnClear = document.getElementById('btnClear');
+      const btnCopy = document.getElementById('btnCopy');
+      const btnDownload = document.getElementById('btnDownload');
+
+      function setStatus(msg) {
+        statusEl.textContent = msg;
+      }
+      function setProgress(pct) {
+        bar.style.width = pct + '%';
+      }
+      function chip(text, tone='ok') {
+        const div = document.createElement('div');
+        div.className = 'chip';
+        div.style.borderColor = tone === 'err' ? '#4a1f26' : tone === 'warn' ? '#4a3b1f' : '#214a40';
+        div.style.background = tone === 'err' ? '#2a0f14' : tone === 'warn' ? '#2a1f0f' : '#0f1f2a';
+        div.style.color = tone === 'err' ? '#ffb4c0' : tone === 'warn' ? '#ffd49a' : '#a7ffef';
+        div.textContent = text;
+        return div;
+      }
+      function lintJSON(str) {
+        lintChips.innerHTML = '';
+        if (!str.trim()) return;
+        try {
+          const parsed = JSON.parse(str);
+          lintChips.appendChild(chip('Valid JSON', 'ok'));
+          // Lightweight schema hints (non-blocking)
+          if (!parsed.id) lintChips.appendChild(chip('Missing id', 'warn'));
+          if (!parsed.llm) lintChips.appendChild(chip('Missing llm section', 'warn'));
+          if (parsed.report && parsed.report.incremental === true && parsed.report.max_workers !== 1) {
+            lintChips.appendChild(chip('incremental=true requires max_workers=1', 'warn'));
+          }
+          return true;
+        } catch (e) {
+          lintChips.appendChild(chip('Invalid JSON: ' + e.message, 'err'));
+          return false;
+        }
+      }
+
+      configEl.addEventListener('input', () => lintJSON(configEl.value));
+      btnFormat.addEventListener('click', () => {
+        try {
+          const obj = JSON.parse(configEl.value);
+          configEl.value = JSON.stringify(obj, null, 2);
+          lintJSON(configEl.value);
+        } catch (e) {
+          alert('Configuration must be valid JSON.');
+        }
+      });
+      btnExample.addEventListener('click', () => {
+        const example = {
+          id: "test_report",
+          name: "Test Report",
+          llm: {
+            model_id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+            system_prompt: "Analyze my data...",
+            temperature: 0.3,
+            max_tokens: 1000
+          },
+          report: { chunk_size: 100, incremental: true, max_workers: 1 }
+        };
+        configEl.value = JSON.stringify(example, null, 2);
+        lintJSON(configEl.value);
+      });
+      btnClear.addEventListener('click', () => {
+        configEl.value = '';
+        fileInput.value = '';
+        lintChips.innerHTML = '';
+        setProgress(0); setStatus('Idle');
+        resultBox.hidden = true; resultPre.textContent = '';
+      });
+
+      // Drag & drop
+      const openPicker = () => fileInput.click();
+      dropzone.addEventListener('click', openPicker);
+      dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); }});
+      dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+      dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+      dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+          fileInput.files = e.dataTransfer.files;
+          setStatus('File attached: ' + e.dataTransfer.files[0].name);
+        }
+      });
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files.length) setStatus('File attached: ' + fileInput.files[0].name);
+      });
+
+      // Submit with progress + client-side JSON validation + optional numeric params
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!lintJSON(configEl.value)) {
+          alert('Configuration must be valid JSON.');
+          return;
+        }
+        const fd = new FormData(form);
+        // Optional numeric normalization
+        const chunkSize = document.getElementById('chunkSize').value.trim();
+        const maxRecords = document.getElementById('maxRecords').value.trim();
+        if (chunkSize) fd.set('chunk_size', String(parseInt(chunkSize, 10)));
+        if (maxRecords) fd.set('max_records', String(parseInt(maxRecords, 10)));
+
+        setStatus('Uploading...'); setProgress(10);
+
+        try {
+          const res = await fetch(form.action, {
+            method: 'POST',
+            body: fd,
+          });
+
+          setProgress(70);
+          const text = await res.text();
+          setProgress(100); setStatus(res.ok ? 'Completed' : 'Failed');
+
+          resultBox.hidden = false;
+          resultPre.textContent = text;
+        } catch (e) {
+          setStatus('Network error');
+          alert('Failed to submit: ' + (e?.message || e));
+        } finally {
+          setTimeout(() => setProgress(0), 800);
+        }
+      });
+
+      // Copy / Download
+      btnCopy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(resultPre.textContent || '');
+          setStatus('Copied to clipboard');
+        } catch { setStatus('Clipboard not available'); }
+      });
+      btnDownload.addEventListener('click', () => {
+        const blob = new Blob([resultPre.textContent || ''], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'report.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    </script>
+  </body>
 </html>
