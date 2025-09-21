@@ -23,7 +23,7 @@ def invoke_llm(
     response_json = _invoke_bedrock_model(prompt, model_id, session)
     response_text = _get_response_content(response_json, model_id)
     usage = _get_response_usage(response_json, model_id)
-    logging.info(f"Got response from LLM. Response length: {len(response_text)}")
+    logging.info(f"LLM usage: {usage}. Response length: {len(response_text)}")
     return {"content": response_text, "usage": usage}
 
 
