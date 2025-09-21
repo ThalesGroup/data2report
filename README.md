@@ -18,6 +18,28 @@ Deployment options include Docker containers for consistent environments and AWS
 
 ![data2report flow](data2report_flow.png)
 
+## Running data2report
+to run data2report using the docker image, first create a folder for the reports. The reports folder will contain both the input data files and the generated reports. For example, create a folder named `reports` under `/tmp`:
+```sh
+mkdir -p /tmp/reports
+```
+
+You will need to have AWS bedrock credentials in order to perform LLM inference. There are many ways to provide the credentials, like using roles, environment variables or config files. You can find more details about it in the [AWS documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html).
+It is possible to create an env file with the credentials and provide it in the docker run command. For example, create a file named `aws.env.list` and place it under a config folder with the following content:
+```
+AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY
+AWS_REGION=YOUR_REGION
+```
+
+Replace /tmp/reports with your reports folder, then run the docker image using the following command:
+```sh
+docker run --rm -v /tmp/reports:/data/data2report/ --env-file config/aws.env.list -p 5000:5000 ghcr.io/thalesgroup/data2report:latest
+```
+
+Once the container is running, you can access the user interface on `http://localhost:5000/` to interact with the service.
+
+
 ## Key Features  
 
 ### Flexible Data Input  
