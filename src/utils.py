@@ -26,3 +26,14 @@ def get_reports_folder() -> str:
 
 def get_current_day() -> str:
     return str(datetime.today().date())
+
+
+def get_report_folder(report_id: str, run_id: str) -> str:
+    reports_folder = get_reports_folder()
+    return os.path.join(
+        reports_folder, "reports", f"report={report_id}", f"run={run_id}"
+    )
+
+
+def get_final_report_name() -> str:
+    return "final_report.gz"

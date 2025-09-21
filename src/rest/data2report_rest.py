@@ -1,3 +1,4 @@
+import gzip
 import json
 import logging
 import os
@@ -6,14 +7,21 @@ from logging.config import fileConfig
 
 from flask import Flask, jsonify, request, render_template
 
+from conf_utils import validate_configuration, list_reports, get_report_config
 from data2report import run_report
-from utils import get_reports_folder, init_env_from_file
+from utils import (
+    get_reports_folder,
+    init_env_from_file,
+    get_report_folder,
+    get_final_report_name,
+)
 
 app = Flask(
     __name__,
     template_folder=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "templates"
     ),
+    static_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"),
 )
 
 
@@ -36,7 +44,7 @@ def _report():
     max_records = request.form.get("max_records")
     force = request.form.get("force", "false").lower() == "true"
     print(f"Config: {config}")
-    with tempfile.NamedTemporaryFile() as tmp_file:
+    with tempfile.NamedTemporaryFile(suffix=file.filename) as tmp_file:
         file.save(tmp_file.name)
         result = run_report(
             input_file=tmp_file.name,
@@ -45,6 +53,41 @@ def _report():
             force=force,
         )
     return jsonify(result)
+
+
+@app.route("/validate", methods=["POST"])
+def _validate_configuration():
+    config = request.json()
+    errors = validate_configuration(config, None)
+    return jsonify(errors)
+
+
+@app.route("/reports", methods=["GET"])
+def _get_reports():
+    return jsonify({list_reports()})
+
+
+@app.route("/report-config", methods=["GET"])
+def _get_report_config():
+    report_id = request.args["id"]
+    return jsonify(get_report_config(report_id))
+
+
+@app.route("/report", methods=["GET"])
+def _get_report():
+    report_id = request.args.get("id")
+    run_id = request.args.get("run_id")
+    report_file_name = os.path.join(
+        get_report_folder(report_id, run_id), get_final_report_name()
+    )
+    if not os.path.exists(report_file_name):
+        return (
+            jsonify({"error": f"Report file '{report_file_name}' does not exist"}),
+            404,
+        )
+    with gzip.open(report_file_name, "rt") as report_file:
+        content = report_file.read()
+    return jsonify({"report": content})
 
 
 def _init_logging():

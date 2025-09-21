@@ -62,6 +62,11 @@ To build the docker image, use the following command from the root of the reposi
 ```sh
 docker build -t data2report .
 ```
+To run the docker image make create a folder for the reports and make sure env file exists under config dir as described above. Then use the following command:
+
+```sh
+docker run --rm -v /tmp/reports:/data/data2report/ --env-file config/aws.env.list -p 1600:5000 data2report
+```
 
 ### Version publication
 

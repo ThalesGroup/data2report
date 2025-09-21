@@ -1,3 +1,5 @@
+![data2report logo](data2report_logo.png)
+
 # data2report: LLM-Based Data Reporting System  
 
 This project aims to build a flexible and scalable reporting system powered by Large Language Models (LLMs). The system takes structured or semi-structured data files (e.g., CSV, JSONL, or compressed formats) and a user-defined prompt, then generates a comprehensive report based on the data.  
@@ -14,7 +16,7 @@ Both incremental and parallel modes allow configurable chunk sizes, enabling a b
 
 Deployment options include Docker containers for consistent environments and AWS Lambda for serverless execution.
 
-![data2report logo](data2report.png)
+![data2report flow](data2report_flow.png)
 
 ## Key Features  
 

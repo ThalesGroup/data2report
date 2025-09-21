@@ -4,12 +4,17 @@ import os
 import shutil
 
 from chunks_utils import split_input_file
-from conf_utils import validate_configuration
+from conf_utils import validate_configuration, get_report_config
 from report_processing import (
     process_chunks_folder,
     process_final_report,
 )
-from utils import get_reports_folder, get_current_day
+from utils import (
+    get_reports_folder,
+    get_current_day,
+    get_report_folder,
+    get_final_report_name,
+)
 
 
 def run_report(
@@ -56,18 +61,7 @@ def run_report(
         raise FileNotFoundError(f"Input file '{input_file}' not found")
     reports_folder = get_reports_folder()
     if report_id:
-        configuration_file = os.path.join(
-            reports_folder, "configuration", f"{report_id}.json"
-        )
-        # TODO if s3 path, check and download from s3
-        if not os.path.exists(configuration_file) or not os.path.isfile(
-            configuration_file
-        ):
-            raise FileNotFoundError(
-                f"Report configuration file '{configuration_file}' not found"
-            )
-        with open(configuration_file, "r") as f:
-            configuration = json.load(f)
+        configuration = get_report_config(report_id)
     conf_errors = validate_configuration(configuration, report_id)
     if len(conf_errors) > 0:
         raise ValueError(f"Invalid report configuration: {conf_errors}")
@@ -76,9 +70,7 @@ def run_report(
     if not run_id:
         run_id = get_current_day()
     if not output_folder:
-        output_folder = os.path.join(
-            reports_folder, "reports", f"report={configuration['id']}", f"run={run_id}"
-        )
+        output_folder = get_report_folder(configuration["id"], run_id)
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
     if not work_folder:
@@ -113,7 +105,7 @@ def run_report(
         report_chunks_folder,
     )
     llm_usage = process_result["llm_usage"]
-    final_report_file = os.path.join(output_folder, "final_report.gz")
+    final_report_file = os.path.join(output_folder, get_final_report_name())
     final_result = process_final_report(
         report_chunks_folder,
         final_report_file,
@@ -124,6 +116,8 @@ def run_report(
         llm_usage["input_tokens"] += final_result["llm_usage"].get("input_tokens", 0)
         llm_usage["output_tokens"] += final_result["llm_usage"].get("output_tokens", 0)
     result = {
+        "report_id": configuration["id"],
+        "run_id": run_id,
         "output_folder": output_folder,
         "work_folder": work_folder,
         "chunks": chunks,
