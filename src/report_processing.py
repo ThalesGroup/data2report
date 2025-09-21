@@ -2,8 +2,10 @@ import gzip
 import logging
 import os
 import shutil
+from datetime import datetime
 
 from llm_utils import invoke_llm
+import concurrent.futures
 
 
 def process_chunks_folder(
@@ -24,32 +26,81 @@ def process_chunks_folder(
     logging.info(
         f"Going to process {len(chunk_files)} chunks. Max workers: {max_workers}"
     )
-    prev_report_file = None
-    for chunk_idx, chunk_file in enumerate(chunk_files):
-        report_file = os.path.join(
-            chunked_reports_folder, f"chunk_{chunk_idx + 1}_report.gz"
-        )
-        logging.info(
-            f"Processing chunk {chunk_idx + 1}/{len(chunk_files)}: {chunk_file}"
-        )
-        process_result = _process_report(
-            os.path.join(chunks_folder, chunk_file),
-            llm_config,
-            report_file,
-            prev_report_file,
-        )
-        if report_config["incremental"]:
-            prev_report_file = report_file
-        llm_usage["input_tokens"] += process_result["usage"].get("input_tokens", 0)
-        llm_usage["output_tokens"] += process_result["usage"].get("output_tokens", 0)
-        if process_result["exists"]:
+    start_time = datetime.now()
+    longest_duration = 0
+    results = []
+    shutdown_called = False
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=max_workers, thread_name_prefix="data2report_"
+    ) as thread_pool:
+        futures = []
+        prev_report_file = None
+        for chunk_idx, chunk_file in enumerate(chunk_files):
+            report_file = os.path.join(
+                chunked_reports_folder, f"chunk_{chunk_idx + 1}_report.gz"
+            )
+            future = thread_pool.submit(
+                _process_report,
+                chunk_idx,
+                os.path.join(chunks_folder, chunk_file),
+                llm_config,
+                report_file,
+                prev_report_file,
+            )
+            futures.append(future)
+            if report_config["incremental"]:
+                prev_report_file = report_file
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            results.append(result)
+            longest_duration = max(longest_duration, result.get("duration-seconds", 0))
+            if _should_stop(
+                start_time, get_process_timeout_seconds(), longest_duration
+            ):
+                thread_pool.shutdown(wait=False, cancel_futures=True)
+                shutdown_called = True
+                break
+    if shutdown_called:
+        for f in concurrent.futures.as_completed(
+            [f for f in futures if not f.cancelled()]
+        ):
+            results.append(f.result())
+    for result in results:
+        llm_usage["input_tokens"] += result["usage"].get("input_tokens", 0)
+        llm_usage["output_tokens"] += result["usage"].get("output_tokens", 0)
+        if result["exists"]:
             exists += 1
+
     return {
         "llm_usage": llm_usage,
         "chunks": len(chunk_files),
         "chunks_skipped": exists,
         "final_report": chunked_reports_folder,
+        "duration_seconds": (datetime.now() - start_time).seconds,
+        "longest_duration_seconds": longest_duration,
     }
+
+
+def get_process_timeout_seconds() -> int:
+    return os.environ.get("TIMEOUT", 800)
+
+
+def _should_stop(
+    start_time: datetime, timeout_seconds: int, longest_duration: int
+) -> bool:
+    elapsed_time = (datetime.now() - start_time).seconds
+    if elapsed_time >= timeout_seconds:
+        logging.info(
+            f"Timeout of {timeout_seconds} seconds occurred. Elapsed time: {elapsed_time} seconds"
+        )
+        return True
+    if longest_duration * 1.2 >= timeout_seconds - elapsed_time:
+        logging.info(
+            f"Canceling future tasks. Longest duration: {longest_duration} seconds. "
+            f"Remaining time until timeout: {timeout_seconds - elapsed_time} seconds"
+        )
+        return True
+    return False
 
 
 def process_final_report(
@@ -73,22 +124,32 @@ def process_final_report(
             )
             shutil.copyfile(last_report_file, output_file)
     else:
-        raise NotImplementedError(
-            "Non-incremental final report generation is not implemented"
-        )
+        with gzip.open(output_file, "wt") as out_f:
+            for f in os.listdir(chunked_reports_folder):
+                chunk_file = os.path.join(chunked_reports_folder, f)
+                with gzip.open(chunk_file, "rt") as in_f:
+                    out_f.write(in_f.read())
+                    out_f.write("\n\n")
+    logging.info(f"Final report generated: {output_file}")
     return result
 
 
 def _process_report(
-    input_file: str, llm_config: dict, output_file: str, prev_report_file: str = None
+    chunk_index: int,
+    input_file: str,
+    llm_config: dict,
+    output_file: str,
+    prev_report_file: str = None,
 ) -> dict:
+    start_time = datetime.now()
     exists = os.path.exists(output_file)
     if exists:
         logging.info(
-            f"Skipping chunk processing, output file '{output_file}' already exists"
+            f"Skipping chunk {chunk_index} processing, output file '{output_file}' already exists"
         )
         usage = {"input_tokens": 0, "output_tokens": 0}
     else:
+        logging.info(f"Processing chunk {chunk_index + 1}: {input_file}")
         prompt_data = _file_to_prompt_data(input_file)
         if prev_report_file and os.path.exists(prev_report_file):
             prev_report_data = _file_to_prompt_data(prev_report_file)
@@ -105,7 +166,8 @@ def _process_report(
         usage = llm_result["usage"]
         with gzip.open(output_file, "wt") as f:
             f.write(llm_result["content"])
-    return {"exists": exists, "usage": usage}
+    duration = (datetime.now() - start_time).seconds
+    return {"exists": exists, "usage": usage, "duration-seconds": duration}
 
 
 def _file_to_prompt_data(input_file: str) -> str:

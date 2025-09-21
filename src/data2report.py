@@ -125,6 +125,8 @@ def run_report(
         "records_limit_reached": max_records is not None and records >= max_records,
         "llm_usage": process_result["llm_usage"],
         "chunks_skipped": process_result["chunks_skipped"],
+        "duration_seconds": process_result["duration_seconds"],
+        "longest_chunk_duration_seconds": process_result["longest_duration_seconds"],
     }
     with open(os.path.join(output_folder, "result.json"), "w") as f:
         json.dump(result, f, indent=2)
