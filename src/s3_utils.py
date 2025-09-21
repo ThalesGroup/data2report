@@ -6,8 +6,18 @@ from boto3.session import Session
 from botocore.exceptions import ClientError
 
 
+def is_s3_configured() -> bool:
+    return "REPORTS_BUCKET" in os.environ and len(os.environ["REPORTS_BUCKET"]) > 0
+
+
 def get_reports_bucket() -> str:
     return os.environ["REPORTS_BUCKET"]
+
+
+def get_data2reports_prefix() -> str:
+    return (
+        os.environ["DATA2REPORTS_PREFIX"] if "DATA2REPORTS_PREFIX" in os.environ else ""
+    )
 
 
 def object_exists(bucket: str, key: str, session: Session) -> bool:
@@ -36,7 +46,7 @@ def upload_content(bucket: str, object_path: str, content: str, session: Session
 def upload_file(bucket: str, file_name: str, object_path: str, session: Session):
     s3_client = session.client("s3")
     try:
-        logging.info(f"Uploading file to S3. Key: {object_path}")
+        logging.info(f"Uploading file to S3. Bucket: {bucket}, Key: {object_path}")
         s3_client.upload_file(file_name, bucket, object_path)
     except Exception as e:
         logging.error(f"❌ Error uploading file: {e}")
@@ -68,7 +78,12 @@ def clear_folder(bucket: str, s3_folder: str, session: Session) -> int:
     elif "Deleted" not in res[0]:
         return 0
     else:
-        return len(res[0]["Deleted"])
+        deleted = len(res[0]["Deleted"])
+        if deleted > 0:
+            logging.info(
+                f"Deleted {deleted} objects from s3://{bucket.name}/{s3_folder}"
+            )
+        return deleted
 
 
 def download_object(bucket: str, key: str, local_path: str, session: Session):
@@ -82,3 +97,17 @@ def download_object(bucket: str, key: str, local_path: str, session: Session):
     except Exception as e:
         logging.error(f"❌ Error downloading file: {e}")
         raise
+
+
+def download_s3_uri(s3_uri: str, local_path: str, session: Session):
+    if not is_s3_uri(s3_uri):
+        raise ValueError(f"Invalid S3 URI: {s3_uri}")
+    parts = s3_uri[5:].split("/", 1)
+    if len(parts) != 2:
+        raise ValueError(f"Invalid S3 URI: {s3_uri}")
+    bucket, key = parts
+    download_object(bucket, key, local_path, session)
+
+
+def is_s3_uri(path: str) -> bool:
+    return path.startswith("s3://")

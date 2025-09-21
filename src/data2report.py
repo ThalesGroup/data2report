@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+from tempfile import NamedTemporaryFile
 
 from chunks_utils import split_input_file
 from conf_utils import validate_configuration, get_report_config
@@ -9,6 +10,15 @@ from report_processing import (
     process_chunks_folder,
     process_final_report,
 )
+from s3_utils import (
+    is_s3_uri,
+    download_s3_uri,
+    is_s3_configured,
+    upload_file,
+    get_reports_bucket,
+    get_data2reports_prefix,
+)
+from boto3.session import Session
 from utils import (
     get_reports_folder,
     get_current_day,
@@ -56,12 +66,17 @@ def run_report(
         raise ValueError("Either report_name or configuration must be provided")
     if not input_file:
         raise ValueError("input_file is required.")
-    # TODO if s3 path, check s3
+    if is_s3_uri(input_file):
+        with NamedTemporaryFile(delete=False) as tmp:
+            download_s3_uri(input_file, tmp.name, session=Session())
+            input_file = tmp.name
     if not os.path.exists(input_file) or not os.path.isfile(input_file):
         raise FileNotFoundError(f"Input file '{input_file}' not found")
     reports_folder = get_reports_folder()
     if report_id:
         configuration = get_report_config(report_id)
+    else:
+        report_id = configuration.get("id")
     conf_errors = validate_configuration(configuration, report_id)
     if len(conf_errors) > 0:
         raise ValueError(f"Invalid report configuration: {conf_errors}")
@@ -69,16 +84,11 @@ def run_report(
         raise FileNotFoundError(f"Report folder '{reports_folder}' does not exist")
     if not run_id:
         run_id = get_current_day()
-    if not output_folder:
-        output_folder = get_report_folder(configuration["id"], run_id)
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
     if not work_folder:
         work_folder = os.path.join(
-            reports_folder, "work", f"report={configuration['id']}", f"run={run_id}"
+            reports_folder, "work", f"report={report_id}", f"run={run_id}"
         )
         if force:
-            # TODO if s3 path, clear s3 folder
             shutil.rmtree(work_folder)
             logging.info(f"Work folder '{work_folder}' cleared")
         if not os.path.exists(work_folder):
@@ -95,7 +105,7 @@ def run_report(
         header=configuration.get("header", False),
     )
     logging.info(
-        f"Report '{configuration['id']}' run '{run_id}' prepared: {chunks} chunks, {records} records"
+        f"Report '{report_id}' run '{run_id}' prepared: {chunks} chunks, {records} records"
     )
     report_chunks_folder = os.path.join(work_folder, "chunk_reports")
     process_result = process_chunks_folder(
@@ -105,6 +115,10 @@ def run_report(
         report_chunks_folder,
     )
     llm_usage = process_result["llm_usage"]
+    if not output_folder:
+        output_folder = get_report_folder(report_id, run_id)
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
     final_report_file = os.path.join(output_folder, get_final_report_name())
     final_result = process_final_report(
         report_chunks_folder,
@@ -112,11 +126,24 @@ def run_report(
         configuration["llm"],
         configuration["report"],
     )
+    if is_s3_configured():
+        output_key = final_report_file[len(get_reports_folder()) + 1 :]
+        if get_data2reports_prefix():
+            if get_data2reports_prefix().endswith("/"):
+                output_key = get_data2reports_prefix() + output_key
+            else:
+                output_key = get_data2reports_prefix() + "/" + output_key
+        upload_file(
+            get_reports_bucket(), final_report_file, output_key, session=Session()
+        )
+        s3_uri = f"s3://{get_reports_bucket()}/{output_key}"
+    else:
+        s3_uri = None
     if "llm_usage" in final_result:
         llm_usage["input_tokens"] += final_result["llm_usage"].get("input_tokens", 0)
         llm_usage["output_tokens"] += final_result["llm_usage"].get("output_tokens", 0)
     result = {
-        "report_id": configuration["id"],
+        "report_id": report_id,
         "run_id": run_id,
         "output_folder": output_folder,
         "work_folder": work_folder,
@@ -127,6 +154,7 @@ def run_report(
         "chunks_skipped": process_result["chunks_skipped"],
         "duration_seconds": process_result["duration_seconds"],
         "longest_chunk_duration_seconds": process_result["longest_duration_seconds"],
+        "s3_uri": s3_uri,
     }
     with open(os.path.join(output_folder, "result.json"), "w") as f:
         json.dump(result, f, indent=2)

@@ -2,15 +2,28 @@ import gzip
 import os.path
 
 import pytest
+from boto3.session import Session
 
 from conftest import get_resources_folder
 from data2report import run_report
+from s3_utils import get_reports_bucket, clear_folder, get_data2reports_prefix
 from utils import init_env_from_file
+
+_TEST_BUCKET_NAME = "data2report"
 
 
 @pytest.fixture(autouse=True, scope="module")
 def set_aws_api_key():
     init_env_from_file()
+
+
+@pytest.fixture()
+def reports_bucket(monkeypatch):
+    monkeypatch.setenv("REPORTS_BUCKET", _TEST_BUCKET_NAME)
+    monkeypatch.setenv("DATA2REPORTS_PREFIX", "temp/data2report/")
+    yield get_reports_bucket()
+    monkeypatch.delenv("REPORTS_BUCKET", raising=False)
+    monkeypatch.delenv("DATA2REPORTS_PREFIX", raising=False)
 
 
 _CONF = {
@@ -32,7 +45,12 @@ _CONF = {
 }
 
 
-def test_run_report(reports_folder):
+def test_run_report(reports_folder, reports_bucket):
+    clear_folder(
+        reports_bucket,
+        get_data2reports_prefix() + "reports/report=test_report",
+        session=Session(),
+    )
     input_file = os.path.join(get_resources_folder(), "urls.csv.gz")
     result = run_report(
         input_file,
