@@ -41,7 +41,9 @@ def _report():
         return jsonify({"error": "No file part"}), 400
     file = request.files["file"]
     config = request.form["config"]
-    max_records = request.form.get("max_records")
+    max_records = (
+        int(request.form["max_records"]) if request.form.get("max_records") else None
+    )
     force = request.form.get("force", "false").lower() == "true"
     print(f"Config: {config}")
     with tempfile.NamedTemporaryFile(suffix=file.filename) as tmp_file:

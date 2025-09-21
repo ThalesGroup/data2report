@@ -149,7 +149,9 @@ def run_report(
         "work_folder": work_folder,
         "chunks": chunks,
         "records": records,
-        "records_limit_reached": max_records is not None and records >= max_records,
+        "records_limit_reached": max_records is not None
+        and records is not None
+        and records >= max_records,
         "llm_usage": process_result["llm_usage"],
         "chunks_skipped": process_result["chunks_skipped"],
         "duration_seconds": process_result["duration_seconds"],
