@@ -42,10 +42,6 @@
               <input type="file" id="file" name="file" accept=".csv,.jsonl,.gz,text/csv,application/gzip" style="display:none" />
               <div class="row">
                 <div class="field">
-                  <label for="chunkSize">Chunk size</label>
-                  <input type="number" id="chunkSize" name="chunk_size" min="1" step="1" placeholder="e.g. 1000" />
-                </div>
-                <div class="field">
                   <label for="maxRecords">Max records (optional)</label>
                   <input type="number" id="maxRecords" name="max_records" min="1" step="1" placeholder="no limit" />
                 </div>
@@ -187,9 +183,7 @@
         }
         const fd = new FormData(form);
         // Optional numeric normalization
-        const chunkSize = document.getElementById('chunkSize').value.trim();
         const maxRecords = document.getElementById('maxRecords').value.trim();
-        if (chunkSize) fd.set('chunk_size', String(parseInt(chunkSize, 10)));
         if (maxRecords) fd.set('max_records', String(parseInt(maxRecords, 10)));
 
         setStatus('Uploading...'); setProgress(10);
