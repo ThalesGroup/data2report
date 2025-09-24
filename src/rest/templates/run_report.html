@@ -68,6 +68,8 @@
             </div>
             <pre id="resultPre"></pre>
           </div>
+
+          <div id="progressPane" style="margin:16px 0; background:#101a2a; color:#a7ffef; padding:8px; border-radius:6px; font-size:14px"></div>
         </form>
       </div>
     </div>
@@ -174,6 +176,31 @@
         if (fileInput.files.length) setStatus('File attached: ' + fileInput.files[0].name);
       });
 
+      let es;
+      function makeRunId() {
+        const d = new Date();
+        return d.toISOString().slice(0,10) + '-' + Math.random().toString(36).slice(2,8);
+      }
+      function subscribeProgress(reportId, runId) {
+        if (es) { es.close(); }
+        es = new EventSource(`/progress/stream?report_id=${encodeURIComponent(reportId)}&run_id=${encodeURIComponent(runId)}`);
+        let totalIn = 0, totalOut = 0;
+        es.addEventListener('progress', (e) => {
+          const evt = JSON.parse(e.data);
+          totalIn += evt.usage?.input_tokens ?? 0;
+          totalOut += evt.usage?.output_tokens ?? 0;
+          const total = evt.total_chunks || 1;
+          const done = evt.completed_chunks || evt.chunk_index || 1;
+          const pct = Math.max(5, Math.min(99, Math.floor((done / total) * 100)));
+          setProgress(pct);
+          document.getElementById('progressPane').innerHTML =
+            `Chunk ${done}/${total} done<br>` +
+            `Tokens in: ${totalIn} &nbsp; Tokens out: ${totalOut}<br>` +
+            `Last chunk duration: ${evt.duration_seconds ?? 0}s`;
+        });
+        es.onerror = () => {};
+      }
+
       // Submit with progress + client-side JSON validation + optional numeric params
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -181,12 +208,16 @@
           alert('Configuration must be valid JSON.');
           return;
         }
-        const fd = new FormData(form);
-        // Optional numeric normalization
-        const maxRecords = document.getElementById('maxRecords').value.trim();
-        if (maxRecords) fd.set('max_records', String(parseInt(maxRecords, 10)));
+        const cfg = JSON.parse(configEl.value);
+        if (!cfg.id) { alert("Configuration must include 'id'"); return; }
+        cfg.run_id = cfg.run_id || makeRunId();
+        configEl.value = JSON.stringify(cfg, null, 2);
 
-        setStatus('Uploading...'); setProgress(10);
+        const fd = new FormData(form);
+        fd.set('config', configEl.value);
+
+        subscribeProgress(cfg.id, cfg.run_id);
+        setStatus('Uploading...'); setProgress(5);
 
         try {
           const res = await fetch(form.action, {
@@ -194,17 +225,15 @@
             body: fd,
           });
 
-          setProgress(70);
-          const text = await res.text();
           setProgress(100); setStatus(res.ok ? 'Completed' : 'Failed');
-
           resultBox.hidden = false;
-          resultPre.textContent = text;
+          resultPre.textContent = await res.text();
         } catch (e) {
           setStatus('Network error');
           alert('Failed to submit: ' + (e?.message || e));
         } finally {
           setTimeout(() => setProgress(0), 800);
+          setTimeout(() => { if (es) es.close(); }, 30000);
         }
       });
 

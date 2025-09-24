@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 from tempfile import NamedTemporaryFile
+from typing import Callable, Optional, Dict, Any
 
 from chunks_utils import split_input_file
 from conf_utils import validate_configuration, get_report_config
@@ -36,6 +37,7 @@ def run_report(
     work_folder: str = None,
     force: bool = False,
     max_records: int = None,
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> dict:
     """
     Prepares and runs a report based on the provided input file and configuration.
@@ -50,6 +52,7 @@ def run_report(
         work_folder (str, optional): Path to the working folder, which contains the intermediate data, like reports for chunks. If not provided, a default path is used.
         force (bool, optional): If True, clears the work folder before running.
         max_records (int, optional): Maximum number of records to process from the input file. If not provided, all records are processed.
+        progress_cb (Callable[[Dict[str, Any]], None], optional): Optional callback function to report progress. The function should accept a dictionary with progress information.
 
     Returns:
         dict: Dictionary containing paths and statistics:
@@ -113,6 +116,9 @@ def run_report(
         configuration["llm"],
         configuration["report"],
         report_chunks_folder,
+        progress_cb=progress_cb,
+        report_id=report_id,
+        run_id=run_id,
     )
     llm_usage = process_result["llm_usage"]
     if not output_folder:

@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 from datetime import datetime
+from typing import Optional, Callable, Dict, Any
 
 from llm_utils import invoke_llm
 import concurrent.futures
@@ -13,6 +14,9 @@ def process_chunks_folder(
     llm_config: dict,
     report_config: dict,
     chunked_reports_folder: str,
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    report_id: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> dict:
     if not os.path.exists(chunked_reports_folder):
         os.makedirs(chunked_reports_folder)
@@ -30,6 +34,29 @@ def process_chunks_folder(
     longest_duration = 0
     results = []
     shutdown_called = False
+    total_chunks = len(chunk_files)
+    completed = 0
+
+    def _notify(result: dict, chunk_idx: int):
+        nonlocal completed
+        completed += 1
+        if progress_cb:
+            progress_cb(
+                {
+                    "event": "chunk_done",
+                    "report_id": report_id,
+                    "run_id": run_id,
+                    "chunk_index": chunk_idx + 1,
+                    "total_chunks": total_chunks,
+                    "exists": result.get("exists", False),
+                    "duration_seconds": result.get("duration-seconds", 0),
+                    "usage": result.get(
+                        "usage", {"input_tokens": 0, "output_tokens": 0}
+                    ),
+                    "completed_chunks": completed,
+                }
+            )
+
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=max_workers, thread_name_prefix="data2report_"
     ) as thread_pool:
@@ -54,6 +81,7 @@ def process_chunks_folder(
             result = future.result()
             results.append(result)
             longest_duration = max(longest_duration, result.get("duration-seconds", 0))
+            _notify(result, result.get("_chunk_index", 0))
             if _should_stop(
                 start_time, get_process_timeout_seconds(), longest_duration
             ):
@@ -167,7 +195,12 @@ def _process_report(
         with gzip.open(output_file, "wt") as f:
             f.write(llm_result["content"])
     duration = (datetime.now() - start_time).seconds
-    return {"exists": exists, "usage": usage, "duration-seconds": duration}
+    return {
+        "exists": exists,
+        "usage": usage,
+        "duration-seconds": duration,
+        "_chunk_index": chunk_index,
+    }
 
 
 def _file_to_prompt_data(input_file: str) -> str:
