@@ -44,9 +44,13 @@
                 <div class="field">
                   <label for="maxRecords">Max records (optional)</label>
                   <input type="number" id="maxRecords" name="max_records" min="1" step="1" placeholder="no limit" />
+                  <div class="field" style="margin-top:12px; display:flex; flex-direction:row; align-items:center;">
+                    <input type="checkbox" id="force" name="force" value="true" style="margin-right:8px;" />
+                    <label for="force" style="margin-bottom:0;">Force (clear work folder before run)</label>
+                  </div>
                 </div>
               </div>
-              <div class="row">
+              <div class="row" style="margin-top:18px;">
                 <button type="submit" class="btn">Run report</button>
                 <button type="button" class="btn ghost" id="btnClear">Clear</button>
               </div>
