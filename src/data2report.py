@@ -91,11 +91,28 @@ def run_report(
         work_folder = os.path.join(
             reports_folder, "work", f"report={report_id}", f"run={run_id}"
         )
-        if force:
-            shutil.rmtree(work_folder)
+        input_details_file = os.path.join(work_folder, "input_details.json")
+        input_details = _get_input_details(input_details_file)
+        input_details_match = False
+        if not force and input_details:
+            if (
+                input_details["input_size_bytes"] == os.path.getsize(input_file)
+                and input_details["chunk_size"] == configuration["report"]["chunk_size"]
+            ):
+                input_details_match = True
+            else:
+                logging.info(
+                    "Input file size or chunk size changed, forcing reprocessing"
+                )
+        if force or not input_details_match:
+            shutil.rmtree(work_folder, ignore_errors=True)
             logging.info(f"Work folder '{work_folder}' cleared")
         if not os.path.exists(work_folder):
             os.makedirs(work_folder)
+        if not input_details_match:
+            _write_input_details(
+                input_details_file, input_file, configuration["report"]["chunk_size"]
+            )
     chunks_folder = os.path.join(work_folder, "chunks")
     if not max_records:
         max_records = configuration["report"].get("max_records")
@@ -168,3 +185,22 @@ def run_report(
         json.dump(result, f, indent=2)
     logging.info("Report processing completed. Result: " + str(result))
     return result
+
+
+def _get_input_details(input_details_file: str) -> Optional[dict[str, Any]]:
+    if os.path.exists(input_details_file) and os.path.isfile(input_details_file):
+        with open(input_details_file, "r") as f:
+            return json.load(f)
+    return None
+
+
+def _write_input_details(input_details_file: str, input_file: str, chunk_size: int):
+    with open(input_details_file, "w") as f:
+        json.dump(
+            {
+                "input_size_bytes": os.path.getsize(input_file),
+                "chunk_size": chunk_size,
+            },
+            f,
+            indent=2,
+        )
