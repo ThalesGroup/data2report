@@ -1,4 +1,4 @@
-      :root {
+:root {
         --bg: #0b1020;
         --card: #111834;
         --muted: #6c7aa0;
@@ -20,7 +20,7 @@
       }
       .container {
         padding: 24px;
-        max-width: 900px;
+        max-width: 1300px;
         margin: 40px auto;
       }
       .card {
