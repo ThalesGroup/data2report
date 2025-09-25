@@ -20,6 +20,15 @@
 
         <form id="reportForm" action="/report" method="post" enctype="multipart/form-data" novalidate>
           <div class="grid">
+            <div class="row" style="margin-bottom:10px; gap:8px; align-items:end">
+  <div class="field" style="flex: 1 1 50%">
+    <label for="savedReports">Saved reports</label>
+    <select id="savedReports"></select>
+    <div class="hint">Choose a saved configuration to load</div>
+  </div>
+  <button type="button" class="btn ghost" id="btnLoad">Load</button>
+  <button type="button" class="btn ghost" id="btnSave">Save</button>
+</div>
             <div class="field">
               <label for="config">Configuration JSON</label>
               <div class="toolbar">
@@ -94,6 +103,10 @@
       const btnClear = document.getElementById('btnClear');
       const btnCopy = document.getElementById('btnCopy');
       const btnDownload = document.getElementById('btnDownload');
+      const savedSel = document.getElementById('savedReports');
+      const btnLoad  = document.getElementById('btnLoad');
+      const btnSave  = document.getElementById('btnSave');
+      const runBtn = document.querySelector('button.btn[type="submit"]');
 
       function setStatus(msg) {
         statusEl.textContent = msg;
@@ -208,10 +221,8 @@
       // Submit with progress + client-side JSON validation + optional numeric params
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (!lintJSON(configEl.value)) {
-          alert('Configuration must be valid JSON.');
-          return;
-        }
+        const ok = await validateViaApi(true);
+        if (!ok) { alert('Fix configuration errors first'); return; }
         const cfg = JSON.parse(configEl.value);
         if (!cfg.id) { alert("Configuration must include 'id'"); return; }
         cfg.run_id = cfg.run_id || makeRunId();
@@ -231,7 +242,19 @@
 
           setProgress(100); setStatus(res.ok ? 'Completed' : 'Failed');
           resultBox.hidden = false;
-          resultPre.textContent = await res.text();
+          try {
+    const payload = await res.json();
+    resultPre.textContent = JSON.stringify(payload, null, 2);
+    if (payload.report_id && payload.run_id) {
+      const a = document.createElement('a');
+      a.href = `/report?id=${encodeURIComponent(payload.report_id)}&run_id=${encodeURIComponent(payload.run_id)}`;
+      a.textContent = 'Open final report';
+      a.target = '_blank';
+      resultPre.parentElement.appendChild(a);
+    }
+  } catch {
+    resultPre.textContent = await res.text(); // fallback for non-JSON
+  }
         } catch (e) {
           setStatus('Network error');
           alert('Failed to submit: ' + (e?.message || e));
@@ -256,6 +279,98 @@
         a.click();
         URL.revokeObjectURL(a.href);
       });
+async function refreshSavedReports() {
+  try {
+    const res = await fetch('/reports');
+    const ids = await res.json(); // ["test_report", ...]
+    savedSel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = '— Select report —';
+    savedSel.appendChild(ph);
+    ids.forEach(id => {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = id;
+      savedSel.appendChild(opt);
+    });
+  } catch (e) {
+    console.warn('Failed to load reports list', e);
+  }
+}
+
+btnLoad.addEventListener('click', async () => {
+  const id = savedSel.value;
+  if (!id) return alert('Pick a report to load');
+  try {
+    const res = await fetch(`/report-config?id=${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error(await res.text());
+    const cfg = await res.json();
+    configEl.value = JSON.stringify(cfg, null, 2);
+    await validateViaApi(); // reflect chips and enable/disable run
+  } catch (e) {
+    alert('Failed to load configuration: ' + e.message);
+  }
+});
+
+btnSave.addEventListener('click', async () => {
+  const ok = await validateViaApi(true); // strict
+  if (!ok) return;
+
+  try {
+    const cfg = JSON.parse(configEl.value);
+    const res = await fetch('/report-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error((payload && payload.errors) ? payload.errors.join('; ') : JSON.stringify(payload));
+    setStatus(`Saved: ${payload.id}`);
+    await refreshSavedReports();
+    savedSel.value = cfg.id;
+  } catch (e) {
+    alert('Failed to save configuration: ' + e.message);
+  }
+});
+
+async function validateViaApi(strict=false) {
+  let cfg;
+  try { cfg = JSON.parse(configEl.value); }
+  catch (e) { showChips(['Invalid JSON: ' + e.message], 'err'); if (strict) return false; else return true; }
+
+  const res = await fetch('/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  });
+  const errors = await res.json(); // array of strings
+  lintChips.innerHTML = '';
+  if (errors.length) {
+    errors.forEach(e => lintChips.appendChild(chip(e, 'err')));
+    runBtn.disabled = true;
+    return false;
+  } else {
+    lintChips.appendChild(chip('Valid configuration', 'ok'));
+    runBtn.disabled = false;
+    return true;
+  }
+}
+
+function showChips(msgs, tone) {
+  lintChips.innerHTML = '';
+  msgs.forEach(m => lintChips.appendChild(chip(m, tone)));
+}
+
+// live validate with debounce
+let vTimer;
+configEl.addEventListener('input', () => {
+  clearTimeout(vTimer);
+  vTimer = setTimeout(() => validateViaApi().catch(()=>{}), 250);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    refreshSavedReports();
+    validateViaApi().catch(()=>{});
+  });
     </script>
   </body>
 </html>

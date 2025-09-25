@@ -15,7 +15,12 @@ from flask import (
     stream_with_context,
 )
 
-from conf_utils import validate_configuration, list_reports, get_report_config
+from conf_utils import (
+    validate_configuration,
+    list_reports,
+    get_report_config,
+    save_report,
+)
 from data2report import run_report
 from utils import (
     get_reports_folder,
@@ -94,20 +99,30 @@ def _report():
 
 @app.route("/validate", methods=["POST"])
 def _validate_configuration():
-    config = request.json()
-    errors = validate_configuration(config, None)
+    config = request.get_json()
+    errors = validate_configuration(config, config.get("id"))
     return jsonify(errors)
 
 
 @app.route("/reports", methods=["GET"])
 def _get_reports():
-    return jsonify({list_reports()})
+    return jsonify(list_reports())
 
 
 @app.route("/report-config", methods=["GET"])
 def _get_report_config():
     report_id = request.args["id"]
     return jsonify(get_report_config(report_id))
+
+
+@app.route("/save-report-config", methods=["POST"])
+def _save_report_config():
+    config = request.json()
+    errors = validate_configuration(config, config.get("id"))
+    if errors:
+        return jsonify({"errors": errors}), 400
+    save_report(config)
+    return jsonify({"status": "saved", "id": config.get("id")}), 201
 
 
 @app.route("/report", methods=["GET"])
