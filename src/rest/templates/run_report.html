@@ -61,6 +61,7 @@
               </div>
               <div class="row" style="margin-top:18px;">
                 <button type="submit" class="btn">Run report</button>
+                <button type="button" class="btn ghost" id="btnStop">Stop</button>
                 <button type="button" class="btn ghost" id="btnClear">Clear</button>
               </div>
             </div>
@@ -107,6 +108,9 @@
       const btnLoad  = document.getElementById('btnLoad');
       const btnSave  = document.getElementById('btnSave');
       const runBtn = document.querySelector('button.btn[type="submit"]');
+      const btnStop = document.getElementById('btnStop');
+
+      let currentRun = { reportId: null, runId: null };
 
       function setStatus(msg) {
         statusEl.textContent = msg;
@@ -175,6 +179,24 @@
         resultBox.hidden = true; resultPre.textContent = '';
       });
 
+
+      btnStop.addEventListener('click', async () => {
+  if (!currentRun.reportId || !currentRun.runId) {
+    return alert('No running job to stop.');
+  }
+  try {
+    await fetch('/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report_id: currentRun.reportId, run_id: currentRun.runId }),
+    });
+    setStatus('Stop requested');
+    if (es) es.close();   // stop receiving SSE
+  } catch (e) {
+    alert('Failed to request stop: ' + (e?.message || e));
+  }
+});
+
       // Drag & drop
       const openPicker = () => fileInput.click();
       dropzone.addEventListener('click', openPicker);
@@ -227,6 +249,7 @@
         if (!cfg.id) { alert("Configuration must include 'id'"); return; }
         cfg.run_id = cfg.run_id || makeRunId();
         configEl.value = JSON.stringify(cfg, null, 2);
+        currentRun = { reportId: cfg.id, runId: cfg.run_id };
 
         const fd = new FormData(form);
         fd.set('config', configEl.value);

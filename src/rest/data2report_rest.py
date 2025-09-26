@@ -4,6 +4,7 @@ import logging
 import os
 import queue
 import tempfile
+import threading
 from logging.config import fileConfig
 
 from flask import (
@@ -39,6 +40,14 @@ app = Flask(
 )
 
 _progress_queues = {}  # key: (report_id, run_id) -> Queue
+_stop_events = {}  # key: (report_id, run_id) -> threading.Event
+
+
+def get_stop_event(report_id: str, run_id: str) -> threading.Event:
+    key = (report_id, run_id)
+    if key not in _stop_events:
+        _stop_events[key] = threading.Event()
+    return _stop_events[key]
 
 
 def get_progress_queue(report_id, run_id):
@@ -84,6 +93,10 @@ def _report():
     cfg = json.loads(config)
     run_id = cfg.get("run_id") or get_current_day()
     progress_cb = _progress_cb_factory(cfg.get("id"), run_id)
+
+    stop_ev = get_stop_event(cfg["id"], run_id)
+    stop_ev.clear()
+
     with tempfile.NamedTemporaryFile(suffix=file.filename) as tmp_file:
         file.save(tmp_file.name)
         result = run_report(
@@ -93,6 +106,7 @@ def _report():
             force=force,
             run_id=run_id,
             progress_cb=progress_cb,
+            stop_event=stop_ev,
         )
     return jsonify(result)
 
@@ -157,6 +171,18 @@ def progress_stream():
             yield f"event: progress\ndata: {json.dumps(evt)}\n\n"
 
     return Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+
+
+@app.post("/stop")
+def stop_run():
+    data = request.get_json(silent=True) or {}
+    report_id = data.get("report_id")
+    run_id = data.get("run_id")
+    if not report_id or not run_id:
+        return jsonify({"error": "report_id and run_id are required"}), 400
+    ev = get_stop_event(report_id, run_id)
+    ev.set()
+    return jsonify({"status": "stopping", "report_id": report_id, "run_id": run_id})
 
 
 def _init_logging():

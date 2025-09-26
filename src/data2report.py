@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Dict, Any
 
@@ -38,6 +39,7 @@ def run_report(
     force: bool = False,
     max_records: int = None,
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> dict:
     """
     Prepares and runs a report based on the provided input file and configuration.
@@ -53,6 +55,7 @@ def run_report(
         force (bool, optional): If True, clears the work folder before running.
         max_records (int, optional): Maximum number of records to process from the input file. If not provided, all records are processed.
         progress_cb (Callable[[Dict[str, Any]], None], optional): Optional callback function to report progress. The function should accept a dictionary with progress information.
+        stop_event (threading.Event, optional): Optional threading event to signal stopping the process. If provided, the process should periodically check this event and stop if it is set.
 
     Returns:
         dict: Dictionary containing paths and statistics:
@@ -136,6 +139,7 @@ def run_report(
         progress_cb=progress_cb,
         report_id=report_id,
         run_id=run_id,
+        stop_event=stop_event,
     )
     llm_usage = process_result["llm_usage"]
     if not output_folder:
@@ -172,9 +176,12 @@ def run_report(
         "work_folder": work_folder,
         "chunks": chunks,
         "records": records,
-        "records_limit_reached": max_records is not None
-        and records is not None
-        and records >= max_records,
+        "records_limit_reached": max_records is not None,
+        "stopped": (
+            bool(stop_event.is_set())
+            if stop_event
+            else False and records is not None and records >= max_records
+        ),
         "llm_usage": process_result["llm_usage"],
         "chunks_skipped": process_result["chunks_skipped"],
         "duration_seconds": process_result["duration_seconds"],

@@ -2,6 +2,7 @@ import gzip
 import logging
 import os
 import shutil
+import threading
 from datetime import datetime
 from typing import Optional, Callable, Dict, Any
 
@@ -17,6 +18,7 @@ def process_chunks_folder(
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     report_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> dict:
     if not os.path.exists(chunked_reports_folder):
         os.makedirs(chunked_reports_folder)
@@ -73,6 +75,7 @@ def process_chunks_folder(
                 llm_config,
                 report_file,
                 prev_report_file,
+                stop_event,
             )
             futures.append(future)
             if report_config["incremental"]:
@@ -82,6 +85,9 @@ def process_chunks_folder(
             results.append(result)
             longest_duration = max(longest_duration, result.get("duration-seconds", 0))
             _notify(result, result.get("_chunk_index", 0))
+            if stop_event and stop_event.is_set():
+                logging.info("Stop requested; not waiting for more futures")
+                break
             if _should_stop(
                 start_time, get_process_timeout_seconds(), longest_duration
             ):
@@ -168,8 +174,16 @@ def _process_report(
     llm_config: dict,
     output_file: str,
     prev_report_file: str = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> dict:
     start_time = datetime.now()
+    if stop_event and stop_event.is_set():
+        return {
+            "exists": False,
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+            "duration-seconds": 0,
+            "_chunk_index": chunk_index,
+        }
     exists = os.path.exists(output_file)
     if exists:
         logging.info(
@@ -178,6 +192,13 @@ def _process_report(
         usage = {"input_tokens": 0, "output_tokens": 0}
     else:
         logging.info(f"Processing chunk {chunk_index + 1}: {input_file}")
+        if stop_event and stop_event.is_set():
+            return {
+                "exists": False,
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+                "duration-seconds": 0,
+                "_chunk_index": chunk_index,
+            }
         prompt_data = _file_to_prompt_data(input_file)
         if prev_report_file and os.path.exists(prev_report_file):
             prev_report_data = _file_to_prompt_data(prev_report_file)
