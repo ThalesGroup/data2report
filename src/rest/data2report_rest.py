@@ -117,7 +117,7 @@ def _get_report_config():
 
 @app.route("/save-report-config", methods=["POST"])
 def _save_report_config():
-    config = request.json()
+    config = request.get_json()
     errors = validate_configuration(config, config.get("id"))
     if errors:
         return jsonify({"errors": errors}), 400

@@ -317,7 +317,7 @@ btnSave.addEventListener('click', async () => {
 
   try {
     const cfg = JSON.parse(configEl.value);
-    const res = await fetch('/report-config', {
+    const res = await fetch('/save-report-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cfg),
