@@ -13,7 +13,7 @@ def get_reports_bucket() -> str:
 def get_data2report_prefix() -> str:
     return (
         os.environ["DATA2REPORT_PREFIX"]
-        if "DATA2REPORTS_PREFIX" in os.environ
+        if "DATA2REPORT_PREFIX" in os.environ
         else "data2report"
     )
 

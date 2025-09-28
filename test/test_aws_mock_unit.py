@@ -99,7 +99,7 @@ def test_upload_report(reports_bucket):
     s3_client.create_bucket(Bucket=get_reports_bucket())
     conf = get_config("test_report")
     result = save_report(conf, session)
-    assert result["s3_key"] == "configuration/test_report.json"
+    assert result["s3_key"] == "data2report/configuration/test_report.json"
     delete_report(conf["id"], session)
     s3_client.delete_bucket(Bucket=get_reports_bucket())
 
@@ -109,7 +109,7 @@ def test_lambda_operations(
     reports_bucket, reports_folder, monkeypatch, csv_file_with_1k_lines
 ):
     session = Session()
-    monkeypatch.setenv("DATA2REPORTS_PREFIX", "data2report")
+    monkeypatch.setenv("DATA2REPORT_PREFIX", "data2report")
     s3_client = session.client("s3")
     s3_client.create_bucket(Bucket=get_reports_bucket())
     conf = get_config("test_report")
