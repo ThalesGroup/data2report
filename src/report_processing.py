@@ -85,9 +85,6 @@ def process_chunks_folder(
             results.append(result)
             longest_duration = max(longest_duration, result.get("duration-seconds", 0))
             _notify(result, result.get("_chunk_index", 0))
-            if stop_event and stop_event.is_set():
-                logging.info("Stop requested; not waiting for more futures")
-                break
             if _should_stop(
                 start_time, get_process_timeout_seconds(), longest_duration
             ):
