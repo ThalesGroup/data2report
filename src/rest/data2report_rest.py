@@ -15,6 +15,7 @@ from flask import (
     Response,
     stream_with_context,
 )
+from boto3.session import Session
 
 from conf_utils import (
     validate_configuration,
@@ -23,12 +24,14 @@ from conf_utils import (
     save_report,
 )
 from data2report import run_report
+from s3_utils import get_reports_bucket, get_data2report_prefix
 from utils import (
     get_reports_folder,
     init_env_from_file,
     get_report_folder,
     get_final_report_name,
     get_current_day,
+    is_s3_configured,
 )
 
 app = Flask(
@@ -135,7 +138,7 @@ def _save_report_config():
     errors = validate_configuration(config, config.get("id"))
     if errors:
         return jsonify({"errors": errors}), 400
-    save_report(config)
+    save_report(config, session=Session())
     return jsonify({"status": "saved", "id": config.get("id")}), 201
 
 
@@ -197,5 +200,9 @@ if __name__ == "__main__":
     logging.info(
         f"Going to start the app. Port: {port}. Reports folder: {get_reports_folder()}"
     )
+    if is_s3_configured():
+        logging.info(
+            f"S3 configured. Reports Bucket: {get_reports_bucket()}. Prefix: {get_data2report_prefix()}"
+        )
     init_env_from_file()
     app.run(host="0.0.0.0", port=os.getenv("APP_PORT", port))

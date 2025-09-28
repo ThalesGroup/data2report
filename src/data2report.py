@@ -17,7 +17,7 @@ from s3_utils import (
     download_s3_uri,
     upload_file,
     get_reports_bucket,
-    get_data2reports_prefix,
+    get_data2report_prefix,
 )
 from boto3.session import Session
 from utils import (
@@ -158,11 +158,11 @@ def run_report(
     )
     if is_s3_configured():
         output_key = final_report_file[len(get_reports_folder()) + 1 :]
-        if get_data2reports_prefix():
-            if get_data2reports_prefix().endswith("/"):
-                output_key = get_data2reports_prefix() + output_key
+        if get_data2report_prefix():
+            if get_data2report_prefix().endswith("/"):
+                output_key = get_data2report_prefix() + output_key
             else:
-                output_key = get_data2reports_prefix() + "/" + output_key
+                output_key = get_data2report_prefix() + "/" + output_key
         upload_file(
             get_reports_bucket(), final_report_file, output_key, session=session
         )

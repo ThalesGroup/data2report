@@ -31,8 +31,10 @@ def zip_sources() -> str:
             if f not in [
                 "lambda_function.py",
                 "pack_sources.py",
+                "deploy_lambda.py",
             ]:
-                z_file.write(os.path.join(_get_sources_dir(), f), f)
+                if f.endswith(".py"):
+                    z_file.write(os.path.join(_get_sources_dir(), f), f)
         with open(os.path.join(_get_sources_dir(), "lambda_function.py"), "r") as f:
             lambda_main_code = f.read()
         with tempfile.NamedTemporaryFile() as tf:

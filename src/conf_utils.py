@@ -7,8 +7,9 @@ from boto3.session import Session
 from s3_utils import (
     download_object,
     get_reports_bucket,
-    get_data2reports_prefix,
+    get_data2report_prefix,
     upload_file,
+    list_folder,
 )
 from utils import get_reports_folder, is_s3_configured
 
@@ -58,9 +59,16 @@ def get_config_file(report_id: str) -> str:
     return os.path.join(get_conf_folder(), f"{report_id}.json")
 
 
+def get_config_s3_folder() -> str:
+    result = get_data2report_prefix()
+    if not result.endswith("/"):
+        result += "/"
+    result += "configuration/"
+    return result
+
+
 def get_config_s3_key(report_id: str) -> str:
-    result = f"{get_data2reports_prefix()}/configuration/{report_id}.json"
-    return result.replace("//", "/").lstrip("/")
+    return f"{get_config_s3_folder()}{report_id}.json"
 
 
 def get_report_config(report_id: str, session: Session = None) -> dict:
@@ -118,11 +126,17 @@ def delete_report(report_id: str, session: Session = None) -> dict:
 
 
 def list_reports() -> List[str]:
-    conf_folder = get_conf_folder()
-    if not os.path.exists(conf_folder):
-        return []
-    return [
-        f[:-5]
-        for f in os.listdir(conf_folder)
-        if f.endswith(".json") and os.path.isfile(os.path.join(conf_folder, f))
-    ]
+    if is_s3_configured():
+        session = Session()
+        folder = get_config_s3_folder()
+        data = list_folder(get_reports_bucket(), get_config_s3_folder(), session)
+        return [v[len(folder) : -5] for v in data if v.endswith(".json")]
+    else:
+        conf_folder = get_conf_folder()
+        if not os.path.exists(conf_folder):
+            return []
+        return [
+            f[:-5]
+            for f in os.listdir(conf_folder)
+            if f.endswith(".json") and os.path.isfile(os.path.join(conf_folder, f))
+        ]
