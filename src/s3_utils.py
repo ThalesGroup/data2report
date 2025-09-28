@@ -6,10 +6,6 @@ from boto3.session import Session
 from botocore.exceptions import ClientError
 
 
-def is_s3_configured() -> bool:
-    return "REPORTS_BUCKET" in os.environ and len(os.environ["REPORTS_BUCKET"]) > 0
-
-
 def get_reports_bucket() -> str:
     return os.environ["REPORTS_BUCKET"]
 

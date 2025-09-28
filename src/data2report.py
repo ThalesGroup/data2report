@@ -15,13 +15,13 @@ from report_processing import (
 from s3_utils import (
     is_s3_uri,
     download_s3_uri,
-    is_s3_configured,
     upload_file,
     get_reports_bucket,
     get_data2reports_prefix,
 )
 from boto3.session import Session
 from utils import (
+    is_s3_configured,
     get_reports_folder,
     get_current_day,
     get_report_folder,
@@ -78,9 +78,12 @@ def run_report(
             input_file = tmp.name
     if not os.path.exists(input_file) or not os.path.isfile(input_file):
         raise FileNotFoundError(f"Input file '{input_file}' not found")
+    session = Session()
     reports_folder = get_reports_folder()
     if report_id:
-        configuration = get_report_config(report_id)
+        configuration = get_report_config(
+            report_id, session=session if is_s3_configured() else None
+        )
     else:
         report_id = configuration.get("id")
     conf_errors = validate_configuration(configuration, report_id)
@@ -161,7 +164,7 @@ def run_report(
             else:
                 output_key = get_data2reports_prefix() + "/" + output_key
         upload_file(
-            get_reports_bucket(), final_report_file, output_key, session=Session()
+            get_reports_bucket(), final_report_file, output_key, session=session
         )
         s3_uri = f"s3://{get_reports_bucket()}/{output_key}"
     else:

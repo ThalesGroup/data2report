@@ -35,8 +35,14 @@ def init_env_from_file():
                     os.environ[key] = value
 
 
+def is_s3_configured() -> bool:
+    return "REPORTS_BUCKET" in os.environ and len(os.environ["REPORTS_BUCKET"]) > 0
+
+
 def get_reports_folder() -> str:
-    return os.environ.get("REPORTS_FOLDER", "/data/data2report/")
+    return os.environ.get(
+        "REPORTS_FOLDER", "/tmp/reports" if is_s3_configured() else "/data/data2report/"
+    )
 
 
 def get_current_day() -> str:

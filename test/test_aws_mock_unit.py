@@ -1,4 +1,6 @@
+import base64
 import gzip
+import json
 import os
 from tempfile import NamedTemporaryFile
 from unittest.mock import patch
@@ -7,8 +9,10 @@ import pytest
 from boto3.session import Session
 from moto import mock_aws
 
-from conftest import get_config
+from conf_utils import save_report, delete_report
+from conftest import get_config, mock_llm
 from data2report import run_report
+from lambda_function import handle_event
 from s3_utils import (
     object_exists,
     get_reports_bucket,
@@ -86,3 +90,52 @@ def test_report_with_s3(reports_bucket, reports_folder, csv_file_with_1k_lines):
         ) as f:
             local_content = f.read()
         assert s3_content == local_content
+
+
+@mock_aws
+def test_upload_report(reports_bucket):
+    session = Session()
+    s3_client = session.client("s3")
+    s3_client.create_bucket(Bucket=get_reports_bucket())
+    conf = get_config("test_report")
+    result = save_report(conf, session)
+    assert result["s3_key"] == "configuration/test_report.json"
+    delete_report(conf["id"], session)
+    s3_client.delete_bucket(Bucket=get_reports_bucket())
+
+
+@mock_aws
+def test_lambda_operations(
+    reports_bucket, reports_folder, monkeypatch, csv_file_with_1k_lines
+):
+    session = Session()
+    monkeypatch.setenv("DATA2REPORTS_PREFIX", "data2report")
+    s3_client = session.client("s3")
+    s3_client.create_bucket(Bucket=get_reports_bucket())
+    conf = get_config("test_report")
+    b64_conf = base64.b64encode(json.dumps(conf).encode("utf-8"))
+    result = handle_event({"operation": "upload_report", "data": b64_conf})
+    assert result["s3_key"] == "data2report/configuration/test_report.json"
+    input_key = "tmp/input/input.csv.gz"
+    upload_file(get_reports_bucket(), csv_file_with_1k_lines, input_key, session)
+    full_key = f"s3://{get_reports_bucket()}/{input_key}"
+    with mock_llm():
+        result = handle_event(
+            {"operation": "run_report", "report_id": conf["id"], "input_key": full_key}
+        )
+        assert (
+            result["s3_uri"]
+            == "s3://my-bucket/data2report/reports/report=test_report/run=2025-09-28/final_report.gz"
+        )
+        result = handle_event(
+            {"operation": "run_report", "report_id": conf["id"], "input_key": full_key}
+        )
+        assert (
+            result["s3_uri"]
+            == "s3://my-bucket/data2report/reports/report=test_report/run=2025-09-28/final_report.gz"
+        )
+    result = handle_event({"operation": "delete_report", "report_id": conf["id"]})
+    assert result["s3_key"] == "data2report/configuration/test_report.json"
+    assert clear_folder(get_reports_bucket(), "tmp/", session) == 1
+    assert clear_folder(get_reports_bucket(), "data2report/reports/", session) == 1
+    s3_client.delete_bucket(Bucket=get_reports_bucket())
