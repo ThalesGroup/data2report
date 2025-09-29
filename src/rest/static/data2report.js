@@ -29,6 +29,29 @@ function setProgress(pct) {
     bar.style.width = pct + '%';
 }
 
+function resetRunUI() {
+  if (typeof es !== 'undefined' && es) {
+    try { es.close(); } catch {}
+    es = null;
+  }
+
+  setProgress(0);
+  setStatus('Starting...');
+
+  const pane = document.getElementById('progressPane');
+  if (pane) pane.innerHTML = '';
+
+  resultPre.textContent = '';
+  const container = resultPre.parentElement;
+  if (container) {
+    [...container.querySelectorAll('a.__open_report_link')].forEach(n => n.remove());
+  }
+
+  resultBox.hidden = true;
+
+  currentRun = { reportId: null, runId: null };
+}
+
 function chip(text, tone = 'ok') {
     const div = document.createElement('div');
     div.className = 'chip';
@@ -144,11 +167,15 @@ function makeRunId() {
 }
 
 function subscribeProgress(reportId, runId) {
-    if (es) {
-        es.close();
-    }
-    es = new EventSource(`/progress/stream?report_id=${encodeURIComponent(reportId)}&run_id=${encodeURIComponent(runId)}`);
-    let totalIn = 0, totalOut = 0;
+    if (es) { try { es.close(); } catch {} }
+  es = new EventSource(`/progress/stream?report_id=${encodeURIComponent(reportId)}&run_id=${encodeURIComponent(runId)}`);
+
+  let totalIn = 0, totalOut = 0;
+
+  es.addEventListener('hello', () => {
+    // optional: mark that the stream connected for this run
+    setStatus(`Connected for ${reportId}/${runId}...`);
+  });
     es.addEventListener('progress', (e) => {
         const evt = JSON.parse(e.data);
         totalIn += evt.usage?.input_tokens ?? 0;
@@ -169,58 +196,58 @@ function subscribeProgress(reportId, runId) {
 // Submit with progress + client-side JSON validation + optional numeric params
 form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    resetRunUI();
+    runBtn.disabled = true;
+    try {
     const ok = await validateViaApi(true);
-    if (!ok) {
-        alert('Fix configuration errors first');
-        return;
-    }
+    if (!ok) { alert('Fix configuration errors first'); return; }
+
     const cfg = JSON.parse(configEl.value);
-    if (!cfg.id) {
-        alert("Configuration must include 'id'");
-        return;
-    }
+    if (!cfg.id) { alert("Configuration must include 'id'"); return; }
     cfg.run_id = cfg.run_id || makeRunId();
     configEl.value = JSON.stringify(cfg, null, 2);
-    currentRun = {reportId: cfg.id, runId: cfg.run_id};
+    currentRun = { reportId: cfg.id, runId: cfg.run_id };
 
-    const fd = new FormData(form);
-    fd.set('config', configEl.value);
-
+    // subscribe before posting to catch early events
     subscribeProgress(cfg.id, cfg.run_id);
     setStatus('Uploading...');
     setProgress(5);
 
-    try {
-        const res = await fetch(form.action, {
-            method: 'POST',
-            body: fd,
-        });
+    const fd = new FormData(form);
+    fd.set('config', configEl.value);
 
-        setProgress(100);
-        setStatus(res.ok ? 'Completed' : 'Failed');
-        resultBox.hidden = false;
-        try {
-            const payload = await res.json();
-            resultPre.textContent = JSON.stringify(payload, null, 2);
-            if (payload.report_id && payload.run_id) {
-                const a = document.createElement('a');
-                a.href = `/report?id=${encodeURIComponent(payload.report_id)}&run_id=${encodeURIComponent(payload.run_id)}`;
-                a.textContent = 'Open final report';
-                a.target = '_blank';
-                resultPre.parentElement.appendChild(a);
-            }
-        } catch {
-            resultPre.textContent = await res.text(); // fallback for non-JSON
-        }
-    } catch (e) {
-        setStatus('Network error');
-        alert('Failed to submit: ' + (e?.message || e));
-    } finally {
-        setTimeout(() => setProgress(0), 800);
-        setTimeout(() => {
-            if (es) es.close();
-        }, 30000);
+    const res = await fetch(form.action, { method: 'POST', body: fd });
+
+    setProgress(100);
+    setStatus(res.ok ? 'Completed' : 'Failed');
+    resultBox.hidden = false;
+
+    // JSON-first + single link
+    const container = resultPre.parentElement;
+    [...container.querySelectorAll('a.__open_report_link')].forEach(n => n.remove());
+    try {
+      const payload = await res.json();
+      resultPre.textContent = JSON.stringify(payload, null, 2);
+      if (payload.report_id && payload.run_id) {
+        const a = document.createElement('a');
+        a.className = '__open_report_link';
+        a.href = `/report?id=${encodeURIComponent(payload.report_id)}&run_id=${encodeURIComponent(payload.run_id)}`;
+        a.textContent = 'Open final report';
+        a.target = '_blank';
+        container.appendChild(a);
+      }
+    } catch {
+      resultPre.textContent = await res.text();
     }
+  } catch (e) {
+    setStatus('Network error');
+    alert('Failed to submit: ' + (e?.message || e));
+  } finally {
+    setTimeout(() => setProgress(0), 800);
+    // keep SSE open to show “Completed” progress; close after a grace period
+    setTimeout(() => { if (es) es.close(); }, 30000);
+    runBtn.disabled = false;
+  }
 });
 
 // Copy / Download
