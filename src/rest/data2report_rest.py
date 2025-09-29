@@ -94,6 +94,9 @@ def _report():
     force = request.form.get("force", "false").lower() == "true"
     print(f"Config: {config}")
     cfg = json.loads(config)
+    val_errs = validate_configuration(cfg, cfg.get("id"))
+    if val_errs:
+        return jsonify({"errors": val_errs}), 400
     run_id = cfg.get("run_id") or get_current_day()
     progress_cb = _progress_cb_factory(cfg.get("id"), run_id)
 
@@ -116,7 +119,7 @@ def _report():
 
 @app.route("/validate", methods=["POST"])
 def _validate_configuration():
-    config = request.get_json()
+    config = request.get_json(silent=True) or {}
     errors = validate_configuration(config, config.get("id"))
     return jsonify(errors)
 
