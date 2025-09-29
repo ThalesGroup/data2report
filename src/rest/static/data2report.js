@@ -68,20 +68,19 @@ btnFormat.addEventListener('click', () => {
         alert('Configuration must be valid JSON.');
     }
 });
-btnExample.addEventListener('click', () => {
-    const example = {
-        id: "test_report",
-        name: "Test Report",
-        llm: {
-            model_id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
-            system_prompt: "Analyze my data...",
-            temperature: 0.3,
-            max_tokens: 1000
-        },
-        report: {chunk_size: 100, incremental: true, max_workers: 1}
-    };
+btnExample.addEventListener('click', async () => {
+  try {
+    const res = await fetch('/example-config');
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    const example = await res.json();
     configEl.value = JSON.stringify(example, null, 2);
-    lintJSON(configEl.value);
+    await validateViaApi();
+  } catch (e) {
+    alert('Failed to load example configuration: ' + (e?.message || e));
+  }
 });
 btnClear.addEventListener('click', () => {
     configEl.value = '';

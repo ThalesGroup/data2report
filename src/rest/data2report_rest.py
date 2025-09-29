@@ -188,6 +188,20 @@ def stop_run():
     return jsonify({"status": "stopping", "report_id": report_id, "run_id": run_id})
 
 
+@app.get("/example-config")
+def _example_config():
+    resource_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "resources",
+        "example_config.json",
+    )
+    if not os.path.exists(resource_path):
+        return jsonify({"error": "example_config.json not found"}), 404
+    with open(resource_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    return jsonify(cfg)
+
+
 def _init_logging():
     fileConfig(os.path.join(os.path.dirname(os.path.abspath(__file__)), "logging.conf"))
     logging.info("Logging initialized")
