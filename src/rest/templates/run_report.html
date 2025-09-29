@@ -2,97 +2,99 @@
 <html lang="en">
 <head>
     <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta content="width=device-width, initial-scale=1" name="viewport"/>
     <title>data2report • Run Report</title>
-    <link rel="icon" type="image/png" href="static/data2report_favicon.png"/>
-    <link type="text/css" rel="stylesheet" href="static/style.css"/>
-    <script type="text/javascript" src="static/data2report.js" defer></script>
+    <link href="static/data2report_favicon.png" rel="icon" type="image/png"/>
+    <link href="static/style.css" rel="stylesheet" type="text/css"/>
+    <script defer src="static/data2report.js" type="text/javascript"></script>
 </head>
 <body>
 <div class="container">
-    <div class="card" role="region" aria-label="Run Report form">
+    <div aria-label="Run Report form" class="card" role="region">
         <div class="card-header">
-            <div class="logo" aria-hidden="true">data2report</div>
+            <div aria-hidden="true" class="logo">data2report</div>
             <div>
                 <h1 class="title">LLM-Based Data Reporting System</h1>
                 <p class="sub">Upload data and a JSON configuration to generate a report</p>
             </div>
         </div>
 
-        <form id="reportForm" action="/report" method="post" enctype="multipart/form-data" novalidate>
+        <form action="/report" enctype="multipart/form-data" id="reportForm" method="post" novalidate>
             <div class="grid">
                 <div class="field">
                     <div class="field">
-                        <div class="toolbar">
-                            <div class="field">
+                        <div class="toolbar toolbar--wrap">
+                            <div class="field field--compact">
                                 <label for="savedReports">Saved reports</label>
                                 <select id="savedReports"></select>
                                 <div class="hint">Choose a saved configuration to load</div>
                             </div>
-                            <button type="button" class="btn ghost" id="btnLoad">Load</button>
-                            <button type="button" class="btn ghost" id="btnSave">Save</button>
-                            <button type="button" class="btn ghost" id="btnFormat">Format</button>
-                            <button type="button" class="btn ghost" id="btnExample">Load example</button>
+                            <button class="btn ghost" id="btnLoad" type="button">Load</button>
+                            <button class="btn ghost" id="btnSave" type="button">Save</button>
+                            <button class="btn ghost" id="btnFormat" type="button">Format</button>
+                            <button class="btn ghost" id="btnExample" type="button">Load example</button>
                         </div>
+
                         <label for="config">Configuration JSON</label>
-                        <textarea id="config" name="config" placeholder='{"id":"report_id", ...}'
-                                  aria-describedby="configHint" style="min-height:350px;"></textarea>
-                        <div id="configHint" class="hint">Press “Format” to pretty-print and validate JSON</div>
-                        <div class="chips" id="lintChips" aria-live="polite"></div>
+                        <textarea aria-describedby="configHint" class="textarea--tall" id="config" name="config"
+                                  placeholder='{"id":"report_id", ...}'></textarea>
+                        <div class="hint" id="configHint">Press “Format” to pretty-print and validate JSON</div>
+                        <div aria-live="polite" class="chips" id="lintChips"></div>
                     </div>
                 </div>
 
                 <div class="field">
                     <label for="file">Data file</label>
-                    <div class="dropzone" id="dropzone" tabindex="0" role="button"
-                         aria-label="Drop or choose a CSV or JSONL file">
+                    <div aria-label="Drop or choose a CSV or JSONL file" class="dropzone" id="dropzone" role="button"
+                         tabindex="0">
                         <div>
-                            <div style="font-weight:700;color:#d7e3ff">Drag & drop</div>
+                            <div class="dz-title">Drag & drop</div>
                             <div class="hint">CSV, JSONL, or compressed (.gz)</div>
                         </div>
                     </div>
-                    <input type="file" id="file" name="file" accept=".csv,.jsonl,.gz,text/csv,application/gzip"
-                           style="display:none"/>
+                    <input accept=".csv,.jsonl,.gz,text/csv,application/gzip" class="hidden" id="file" name="file"
+                           type="file"/>
+
                     <div class="row">
                         <div class="field">
                             <label for="maxRecords">Max records (optional)</label>
-                            <input type="number" id="maxRecords" name="max_records" min="1" step="1"
-                                   placeholder="no limit"/>
-                            <div class="field"
-                                 style="margin-top:12px; display:flex; flex-direction:row; align-items:center;">
-                                <input type="checkbox" id="force" name="force" value="true" style="margin-right:8px;"/>
-                                <label for="force" style="margin-bottom:0;">Force (clear work folder before run)</label>
+                            <input id="maxRecords" min="1" name="max_records" placeholder="no limit" step="1"
+                                   type="number"/>
+
+                            <div class="field field--inline field--mt-12">
+                                <input class="mr-8" id="force" name="force" type="checkbox" value="true"/>
+                                <label class="mb-0" for="force">Force (clear work folder before run)</label>
                             </div>
                         </div>
                     </div>
-                    <div class="row" style="margin-top:18px;">
-                        <button type="submit" class="btn">Run report</button>
-                        <button type="button" class="btn ghost" id="btnStop">Stop</button>
-                        <button type="button" class="btn ghost" id="btnClear">Clear</button>
+
+                    <div class="row row--mt-18">
+                        <button class="btn" type="submit">Run report</button>
+                        <button class="btn ghost" id="btnStop" type="button">Stop</button>
+                        <button class="btn ghost" id="btnClear" type="button">Clear</button>
                     </div>
                 </div>
             </div>
 
             <div class="footer">
-                <div class="progress" aria-hidden="true">
+                <div aria-hidden="true" class="progress">
                     <div class="bar" id="bar"></div>
                 </div>
                 <div class="status" id="status">Idle</div>
             </div>
 
-            <div class="result" id="result" hidden>
-                <div class="row" style="margin-bottom:8px">
+            <div class="result" hidden id="result">
+                <div class="row row--mb-8">
                     <strong>Response</strong>
-                    <div style="display:flex; gap:8px; justify-content:flex-end">
-                        <button type="button" class="btn ghost" id="btnCopy">Copy</button>
-                        <button type="button" class="btn ghost" id="btnDownload">Download</button>
+                    <div class="row row--gap-8 row--justify-end">
+                        <button class="btn ghost" id="btnCopy" type="button">Copy</button>
+                        <button class="btn ghost" id="btnDownload" type="button">Download</button>
                     </div>
                 </div>
                 <pre id="resultPre"></pre>
             </div>
 
-            <div id="progressPane"
-                 style="margin:16px 0; background:#101a2a; color:#a7ffef; padding:8px; border-radius:6px; font-size:14px"></div>
+            <div class="progress-pane" id="progressPane"></div>
         </form>
     </div>
 </div>
