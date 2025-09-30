@@ -2,6 +2,7 @@ import base64
 import gzip
 import json
 import os
+from datetime import date
 from tempfile import NamedTemporaryFile
 from unittest.mock import patch
 
@@ -125,14 +126,14 @@ def test_lambda_operations(
         )
         assert (
             result["s3_uri"]
-            == "s3://my-bucket/data2report/reports/report=test_report/run=2025-09-29/final_report.gz"
+            == f"s3://my-bucket/data2report/reports/report=test_report/run={date.today()}/final_report.gz"
         )
         result = handle_event(
             {"operation": "run_report", "report_id": conf["id"], "input_key": full_key}
         )
         assert (
             result["s3_uri"]
-            == "s3://my-bucket/data2report/reports/report=test_report/run=2025-09-29/final_report.gz"
+            == f"s3://my-bucket/data2report/reports/report=test_report/run={date.today()}/final_report.gz"
         )
     result = handle_event({"operation": "delete_report", "report_id": conf["id"]})
     assert result["s3_key"] == "data2report/configuration/test_report.json"

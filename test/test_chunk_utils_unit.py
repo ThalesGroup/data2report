@@ -13,10 +13,12 @@ def _lines_in_gz(path: str) -> int:
         return sum(1 for _ in fh)
 
 
-def test_csv_chunk_sizes(csv_file_with_1k_lines, tmp_path):
+def test_csv_chunk_sizes(csv_file_with_1k_lines_no_header, tmp_path):
     for size, expected in [(500, 2), (300, 4), (100, 10)]:
         out_dir = tmp_path / f"chunks_{size}"
-        chunks, records = split_input_file(str(out_dir), csv_file_with_1k_lines, size)
+        chunks, records = split_input_file(
+            str(out_dir), csv_file_with_1k_lines_no_header, size
+        )
 
         assert records == 1_000
         assert chunks == expected
@@ -28,10 +30,27 @@ def test_csv_chunk_sizes(csv_file_with_1k_lines, tmp_path):
             assert _lines_in_gz(f) <= size
 
 
-def test_max_records_limit(csv_file_with_1k_lines, tmp_path):
+def test_csv_chunk_sizes_header(csv_file_with_1k_lines, tmp_path):
+    for size, expected in [(500, 2), (300, 4), (100, 10)]:
+        out_dir = tmp_path / f"chunks_{size}"
+        chunks, records = split_input_file(
+            str(out_dir), csv_file_with_1k_lines, size, header=True
+        )
+
+        assert records == 1_000
+        assert chunks == expected
+        assert (
+            len([f for f in os.listdir(out_dir) if f.endswith(".csv.gz")]) == expected
+        )
+
+        for f in out_dir.iterdir():
+            assert _lines_in_gz(f) - 1 <= size
+
+
+def test_max_records_limit(csv_file_with_1k_lines_no_header, tmp_path):
     out_dir = tmp_path / "limited"
     chunks, records = split_input_file(
-        str(out_dir), csv_file_with_1k_lines, 100, max_records=350
+        str(out_dir), csv_file_with_1k_lines_no_header, 100, max_records=350
     )
 
     assert records == 350
@@ -56,7 +75,7 @@ def test_empty_input_file(empty_file, tmp_path):
     assert len(list(out_dir.iterdir())) == 0
 
 
-def test_skip_existing_chunks(csv_file_with_1k_lines, tmp_path):
+def test_skip_existing_chunks(csv_file_with_1k_lines_no_header, tmp_path):
     """Test idempotent behavior when chunks already exist."""
     out_dir = tmp_path / "existing"
     out_dir.mkdir()
@@ -66,7 +85,9 @@ def test_skip_existing_chunks(csv_file_with_1k_lines, tmp_path):
     with gzip.open(dummy_chunk, "wt", encoding="utf-8") as f:
         f.write("dummy,data\n")
 
-    chunks, records = split_input_file(str(out_dir), csv_file_with_1k_lines, 100)
+    chunks, records = split_input_file(
+        str(out_dir), csv_file_with_1k_lines_no_header, 100
+    )
 
     assert chunks == 1
     assert records is None
@@ -111,9 +132,9 @@ def test_csv_header_propagation(csv_file_with_1k_lines, tmp_path):
             assert zf.readline().strip() == "id,name,value"
 
 
-def test_jsonl_and_jsonl_gz(csv_file_with_1k_lines, tmp_path):
+def test_jsonl_and_jsonl_gz(csv_file_with_1k_lines_no_header, tmp_path):
     jsonl = str(tmp_path / "data.jsonl")
-    with open(csv_file_with_1k_lines, "r", encoding="utf-8") as src, open(
+    with open(csv_file_with_1k_lines_no_header, "r", encoding="utf-8") as src, open(
         jsonl, "w", encoding="utf-8"
     ) as dst:
         for ln in src:

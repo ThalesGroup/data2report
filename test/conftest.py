@@ -40,14 +40,20 @@ def csv_file_with_500_lines() -> Generator[str, None, None]:
 
 @pytest.fixture
 def csv_file_with_1k_lines() -> Generator[str, None, None]:
-    yield from _generate_csv(1000)
+    yield from _generate_csv(1000, True)
 
 
-def _generate_csv(lines: int):
+@pytest.fixture
+def csv_file_with_1k_lines_no_header() -> Generator[str, None, None]:
+    yield from _generate_csv(1000, False)
+
+
+def _generate_csv(lines: int, header: bool):
     with tempfile.NamedTemporaryFile() as temp_f:
         with open(temp_f.name, "w") as open_f:
             writer = csv.DictWriter(open_f, fieldnames=["id", "name", "value"])
-            writer.writeheader()
+            if header:
+                writer.writeheader()
             for i in range(lines):
                 writer.writerow({"id": i, "name": f"name_{i}", "value": f"value_{i}"})
         yield temp_f.name
