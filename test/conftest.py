@@ -35,7 +35,7 @@ def empty_file() -> Generator[str, None, None]:
 
 @pytest.fixture
 def csv_file_with_500_lines() -> Generator[str, None, None]:
-    yield from _generate_csv(500)
+    yield from _generate_csv(500, True)
 
 
 @pytest.fixture
