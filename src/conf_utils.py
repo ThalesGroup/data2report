@@ -13,6 +13,20 @@ from s3_utils import (
 )
 from utils import get_reports_folder, is_s3_configured
 
+VALID_PREFIXES = (
+    "anthropic.claude-",
+    "us.anthropic.claude-",
+    "ai21.jamba-",
+    "amazon.titan-text-",
+    "amazon.nova-",
+)
+
+
+def _has_valid_model_prefix(model_id: str) -> bool:
+    return isinstance(model_id, str) and any(
+        model_id.startswith(p) for p in VALID_PREFIXES
+    )
+
 
 def validate_configuration(configuration: dict, report_id: Optional[str]) -> List[str]:
     errors = []
@@ -26,8 +40,18 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
         errors.append("Missing 'llm' section in configuration")
     else:
         llm = configuration["llm"]
-        if not llm.get("model_id"):
+        model_id = llm.get("model_id")
+        if not model_id:
             errors.append("llm.model_id is required")
+        elif not _has_valid_model_prefix(model_id):
+            errors.append(
+                f"llm.model_id '{model_id}' is not supported; expected prefixes: {', '.join(VALID_PREFIXES)}"
+            )
+        system_prompt = llm.get("system_prompt")
+        if not isinstance(system_prompt, str) or not system_prompt.strip():
+            errors.append(
+                "llm.system_prompt is required and must be a non-empty string"
+            )
         temp = llm.get("temperature")
         if temp is None or not (0 <= temp <= 1):
             errors.append("llm.temperature must be between 0 and 1")
@@ -48,6 +72,19 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
             errors.append("For incremental mode, report.max_workers must be 1")
         if incr is False and (not isinstance(workers, int) or workers < 1):
             errors.append("report.max_workers must be >=1")
+
+        input_conf = rpt.get("input")
+        if input_conf is not None:
+            if not isinstance(input_conf, dict):
+                errors.append("report.input must be an object when provided")
+            else:
+                fmt = input_conf.get("format")
+                if fmt is not None and fmt not in ("csv", "jsonl"):
+                    errors.append("report.input.format must be 'csv' or 'jsonl'")
+                header = input_conf.get("header")
+                if header is not None and not isinstance(header, bool):
+                    errors.append("report.input.header must be a boolean")
+
     return errors
 
 
