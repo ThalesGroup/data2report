@@ -47,6 +47,7 @@ def _generate_csv(lines: int):
     with tempfile.NamedTemporaryFile() as temp_f:
         with open(temp_f.name, "w") as open_f:
             writer = csv.DictWriter(open_f, fieldnames=["id", "name", "value"])
+            writer.writeheader()
             for i in range(lines):
                 writer.writerow({"id": i, "name": f"name_{i}", "value": f"value_{i}"})
         yield temp_f.name

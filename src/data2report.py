@@ -127,8 +127,8 @@ def run_report(
         input_file,
         configuration["report"]["chunk_size"],
         max_records,
-        input_format=configuration["report"].get("input", {}).get("format"),
-        header=configuration.get("header", False),
+        input_format=configuration.get("input", {}).get("format"),
+        header=configuration.get("input", {}).get("header"),
     )
     logging.info(
         f"Report '{report_id}' run '{run_id}' prepared: {chunks} chunks, {records} records"
