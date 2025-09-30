@@ -93,11 +93,12 @@ def _report():
     )
     force = request.form.get("force", "false").lower() == "true"
     print(f"Config: {config}")
+    run_id_override = request.form.get("run_id")
     cfg = json.loads(config)
     val_errs = validate_configuration(cfg, cfg.get("id"))
     if val_errs:
         return jsonify({"errors": val_errs}), 400
-    run_id = cfg.get("run_id") or get_current_day()
+    run_id = run_id_override or cfg.get("run_id") or get_current_day()
     progress_cb = _progress_cb_factory(cfg.get("id"), run_id)
 
     stop_ev = get_stop_event(cfg["id"], run_id)

@@ -204,17 +204,17 @@ form.addEventListener('submit', async (event) => {
 
     const cfg = JSON.parse(configEl.value);
     if (!cfg.id) { alert("Configuration must include 'id'"); return; }
-    cfg.run_id = cfg.run_id || makeRunId();
-    configEl.value = JSON.stringify(cfg, null, 2);
-    currentRun = { reportId: cfg.id, runId: cfg.run_id };
+    const runId = cfg.run_id || makeRunId();
+    currentRun = { reportId: cfg.id, runId: runId };
 
     // subscribe before posting to catch early events
-    subscribeProgress(cfg.id, cfg.run_id);
+    subscribeProgress(cfg.id, runId);
     setStatus('Uploading...');
     setProgress(5);
 
     const fd = new FormData(form);
     fd.set('config', configEl.value);
+    fd.set('run_id', runId);
 
     const res = await fetch(form.action, { method: 'POST', body: fd });
 
