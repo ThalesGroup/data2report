@@ -113,6 +113,9 @@ btnClear.addEventListener('click', () => {
     pristineConfigText = '';
     setDirty(false);
     fileInput.value = '';
+    hasFile = false;
+    isConfigValid = false;
+    updateRunButtonState();
     lintChips.innerHTML = '';
     setProgress(0);
     setStatus('Idle');
@@ -157,10 +160,14 @@ dropzone.addEventListener('drop', e => {
     dropzone.classList.remove('dragover');
     if (e.dataTransfer.files.length) {
         fileInput.files = e.dataTransfer.files;
+        hasFile = true;
+        updateRunButtonState();
         setStatus('File attached: ' + e.dataTransfer.files[0].name);
     }
 });
 fileInput.addEventListener('change', () => {
+    hasFile = fileInput.files && fileInput.files.length > 0;
+    updateRunButtonState();
     if (fileInput.files.length) setStatus('File attached: ' + fileInput.files[0].name);
 });
 
@@ -203,6 +210,8 @@ form.addEventListener('submit', async (event) => {
     event.preventDefault();
     resetRunUI();
     runBtn.disabled = true;
+    if (!isConfigValid) return alert('Configuration is invalid.');
+    if (!hasFile) return alert('Please choose a data file.');
     try {
     const ok = await validateViaApi(true);
     if (!ok) { alert('Fix configuration errors first'); return; }
@@ -366,16 +375,27 @@ function setDirty(nextDirty) {
   btnSave.disabled = !isDirty;
 }
 
+let isConfigValid = false;
+let hasFile = false;
+
+function updateRunButtonState() {
+  runBtn.disabled = !(isConfigValid && hasFile);
+}
+
 async function validateViaApi(strict = false) {
     let cfg;
     try {
         if (configEl.value.length === 0) {
             showChips(['Empty'], 'warn');
+            isConfigValid = true;
+            updateRunButtonState();
             return true;
         }
         cfg = JSON.parse(configEl.value);
     } catch (e) {
         showChips(['Invalid JSON: ' + e.message], 'err');
+        isConfigValid = !strict;
+        updateRunButtonState();
         if (strict) return false; else return true;
     }
 
@@ -388,13 +408,17 @@ async function validateViaApi(strict = false) {
     lintChips.innerHTML = '';
     if (errors.length) {
         errors.forEach(e => lintChips.appendChild(chip(e, 'err')));
+        isConfigValid = false;
         runBtn.disabled = true;
         return false;
     } else {
         lintChips.appendChild(chip('Valid configuration', 'ok'));
+        isConfigValid = true;
         runBtn.disabled = false;
         return true;
     }
+    updateRunButtonState();
+    return isConfigValid;
 }
 
 function showChips(msgs, tone) {
@@ -416,6 +440,9 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshSavedReports();
     pristineConfigText = configEl.value || '';
     setDirty(false);
+    hasFile = fileInput.files && fileInput.files.length > 0;
+    isConfigValid = false;
+    updateRunButtonState();
     validateViaApi().catch(() => {
     });
     setTimeout(() => { btnSave.disabled = !isDirty; }, 0);
