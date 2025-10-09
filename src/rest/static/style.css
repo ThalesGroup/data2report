@@ -239,3 +239,14 @@
   border-radius: 6px;
   font-size: 14px;
 }
+
+#__dirty_chip {
+  border-color: #4a3b1f;
+  background: #2a1f0f;
+  color: #ffd49a;
+}
+
+button#btnSave[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
