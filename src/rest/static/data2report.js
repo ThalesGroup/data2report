@@ -86,6 +86,7 @@ btnFormat.addEventListener('click', () => {
     try {
         const obj = JSON.parse(configEl.value);
         configEl.value = JSON.stringify(obj, null, 2);
+        setDirty(configEl.value !== pristineConfigText);
         lintJSON(configEl.value);
     } catch (e) {
         alert('Configuration must be valid JSON.');
@@ -100,6 +101,8 @@ btnExample.addEventListener('click', async () => {
     }
     const example = await res.json();
     configEl.value = JSON.stringify(example, null, 2);
+    pristineConfigText = configEl.value;
+    setDirty(false);
     await validateViaApi();
   } catch (e) {
     alert('Failed to load example configuration: ' + (e?.message || e));
@@ -107,6 +110,8 @@ btnExample.addEventListener('click', async () => {
 });
 btnClear.addEventListener('click', () => {
     configEl.value = '';
+    pristineConfigText = '';
+    setDirty(false);
     fileInput.value = '';
     lintChips.innerHTML = '';
     setProgress(0);
@@ -289,6 +294,10 @@ async function refreshSavedReports() {
 }
 
 btnLoad.addEventListener('click', async () => {
+    if (isDirty) {
+    const ok = confirm('You have unsaved changes. Loading a configuration will discard them. Continue?');
+    if (!ok) return;
+    }
     const id = savedSel.value;
     if (!id) return alert('Pick a report to load');
     try {
@@ -296,10 +305,18 @@ btnLoad.addEventListener('click', async () => {
         if (!res.ok) throw new Error(await res.text());
         const cfg = await res.json();
         configEl.value = JSON.stringify(cfg, null, 2);
+        pristineConfigText = configEl.value;
+        setDirty(false);
         await validateViaApi(); // reflect chips and enable/disable run
     } catch (e) {
         alert('Failed to load configuration: ' + e.message);
     }
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (!isDirty) return;
+  e.preventDefault();
+  e.returnValue = ''; // required for Chrome to show the prompt
 });
 
 btnSave.addEventListener('click', async () => {
@@ -318,10 +335,36 @@ btnSave.addEventListener('click', async () => {
         setStatus(`Saved: ${payload.id}`);
         await refreshSavedReports();
         savedSel.value = cfg.id;
+        pristineConfigText = configEl.value;
+        setDirty(false);
+
     } catch (e) {
         alert('Failed to save configuration: ' + e.message);
     }
 });
+
+
+let pristineConfigText = "";   // last loaded or saved JSON text
+let isDirty = false;
+
+function setDirty(nextDirty) {
+  isDirty = !!nextDirty;
+  const chipId = "__dirty_chip";
+  const has = document.getElementById(chipId);
+  if (isDirty) {
+    if (!has) {
+      const mark = document.createElement('div');
+      mark.id = chipId;
+      mark.className = 'chip';
+      mark.textContent = 'Edited';
+      document.getElementById('lintChips').prepend(mark);
+    }
+  } else if (has) {
+    has.remove();
+  }
+  // Save button enabled only when dirty
+  btnSave.disabled = !isDirty;
+}
 
 async function validateViaApi(strict = false) {
     let cfg;
@@ -365,10 +408,15 @@ configEl.addEventListener('input', () => {
     clearTimeout(vTimer);
     vTimer = setTimeout(() => validateViaApi().catch(() => {
     }), 250);
+    setDirty(configEl.value !== pristineConfigText);
 });
 
+btnSave.disabled = true;
 document.addEventListener('DOMContentLoaded', () => {
     refreshSavedReports();
+    pristineConfigText = configEl.value || '';
+    setDirty(false);
     validateViaApi().catch(() => {
     });
+    setTimeout(() => { btnSave.disabled = !isDirty; }, 0);
 });
