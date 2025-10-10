@@ -29,6 +29,11 @@ function setProgress(pct) {
     bar.style.width = pct + '%';
 }
 
+function setRunningState(running) {
+  runBtn.disabled = running ? true : runBtn.disabled;
+  btnStop.disabled = !running;
+}
+
 function resetRunUI() {
   if (typeof es !== 'undefined' && es) {
     try { es.close(); } catch {}
@@ -50,6 +55,7 @@ function resetRunUI() {
   resultBox.hidden = true;
 
   currentRun = { reportId: null, runId: null };
+  setRunningState(false);
 }
 
 function chip(text, tone = 'ok') {
@@ -121,6 +127,7 @@ btnClear.addEventListener('click', () => {
     setStatus('Idle');
     resultBox.hidden = true;
     resultPre.textContent = '';
+    setRunningState(false);
 });
 
 
@@ -128,6 +135,7 @@ btnStop.addEventListener('click', async () => {
     if (!currentRun.reportId || !currentRun.runId) {
         return alert('No running job to stop.');
     }
+    btnStop.disabled = true; // prevent multiple clicks
     try {
         await fetch('/stop', {
             method: 'POST',
@@ -220,6 +228,7 @@ form.addEventListener('submit', async (event) => {
     if (!cfg.id) { alert("Configuration must include 'id'"); return; }
     const runId = cfg.run_id || makeRunId();
     currentRun = { reportId: cfg.id, runId: runId };
+    setRunningState(true);
 
     // subscribe before posting to catch early events
     subscribeProgress(cfg.id, runId);
@@ -260,6 +269,7 @@ form.addEventListener('submit', async (event) => {
     setTimeout(() => setProgress(0), 800);
     // keep SSE open to show “Completed” progress; close after a grace period
     setTimeout(() => { if (es) es.close(); }, 30000);
+    setRunningState(false);
     runBtn.disabled = false;
   }
 });
@@ -446,4 +456,5 @@ document.addEventListener('DOMContentLoaded', () => {
     validateViaApi().catch(() => {
     });
     setTimeout(() => { btnSave.disabled = !isDirty; }, 0);
+    btnStop.disabled = true;
 });
