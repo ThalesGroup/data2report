@@ -23,10 +23,12 @@ let currentRun = {reportId: null, runId: null};
 
 function setStatus(msg) {
     statusEl.textContent = msg;
+    updateClearButtonState();
 }
 
 function setProgress(pct) {
     bar.style.width = pct + '%';
+    updateClearButtonState();
 }
 
 function setRunningState(running) {
@@ -56,6 +58,7 @@ function resetRunUI() {
 
   currentRun = { reportId: null, runId: null };
   setRunningState(false);
+  updateClearButtonState();
 }
 
 function chip(text, tone = 'ok') {
@@ -115,19 +118,21 @@ btnExample.addEventListener('click', async () => {
   }
 });
 btnClear.addEventListener('click', () => {
-    configEl.value = '';
-    pristineConfigText = '';
-    setDirty(false);
-    fileInput.value = '';
-    hasFile = false;
-    isConfigValid = false;
-    updateRunButtonState();
-    lintChips.innerHTML = '';
     setProgress(0);
     setStatus('Idle');
-    resultBox.hidden = true;
+
+    const pane = document.getElementById('progressPane');
+    if (pane) pane.innerHTML = '';
+
     resultPre.textContent = '';
+    const container = resultPre.parentElement;
+    if (container) {
+    [...container.querySelectorAll('a.__open_report_link')].forEach(n => n.remove());
+    }
+    resultBox.hidden = true;
+
     setRunningState(false);
+    updateClearButtonState();
 });
 
 
@@ -251,6 +256,7 @@ form.addEventListener('submit', async (event) => {
     try {
       const payload = await res.json();
       resultPre.textContent = JSON.stringify(payload, null, 2);
+      updateClearButtonState();
       if (payload.report_id && payload.run_id) {
         const a = document.createElement('a');
         a.className = '__open_report_link';
@@ -392,6 +398,23 @@ function updateRunButtonState() {
   runBtn.disabled = !(isConfigValid && hasFile);
 }
 
+function hasClearableLog() {
+  const pane = document.getElementById('progressPane');
+  const hasProgressPane = !!(pane && pane.textContent.trim().length);
+
+  const hasResponse = !!(resultPre.textContent && resultPre.textContent.trim().length);
+  const hasLink = !!(resultPre.parentElement && resultPre.parentElement.querySelector('a.__open_report_link'));
+
+  const barNonZero = !!(bar.style.width && bar.style.width !== '0%');
+  const statusNotIdle = !!(statusEl.textContent && statusEl.textContent !== 'Idle');
+
+  return hasProgressPane || hasResponse || hasLink || barNonZero || statusNotIdle;
+}
+
+function updateClearButtonState() {
+  btnClear.disabled = !hasClearableLog();
+}
+
 async function validateViaApi(strict = false) {
     let cfg;
     try {
@@ -457,4 +480,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     setTimeout(() => { btnSave.disabled = !isDirty; }, 0);
     btnStop.disabled = true;
+    updateClearButtonState();
 });
