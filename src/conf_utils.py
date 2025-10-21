@@ -67,6 +67,10 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
         if not isinstance(chunk, int) or chunk <= 0:
             errors.append("report.chunk_size must be a positive integer")
 
+        name = rpt.get("name")
+        if not isinstance(name, str) or not name.strip():
+            errors.append("report.name is required and must be a non-empty string")
+
         incr = rpt.get("incremental")
         if not isinstance(incr, bool):
             errors.append("report.incremental must be a boolean value")
