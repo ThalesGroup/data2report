@@ -33,7 +33,11 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
     errors = []
     if "id" not in configuration or not configuration["id"]:
         errors.append("Missing report id")
-    elif report_id and configuration["id"] != report_id:
+    else:
+        invalid_chars = set('/\\:*?"<>|')
+        if any(c in configuration["id"] for c in invalid_chars):
+            errors.append("Report id contains invalid characters (e.g. /, \\, :, *, ?, \", <, >, |)")
+    if report_id and configuration["id"] != report_id:
         errors.append(
             "Report id in configuration does not match the provided report_id"
         )
