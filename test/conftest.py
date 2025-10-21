@@ -1,5 +1,6 @@
 import contextlib
 import csv
+import gzip
 import json
 import os
 import tempfile
@@ -44,13 +45,30 @@ def csv_file_with_1k_lines() -> Generator[str, None, None]:
 
 
 @pytest.fixture
+def csv_gz_file_with_1k_lines() -> Generator[str, None, None]:
+    yield from _generate_csv(1000, True, True)
+
+
+@pytest.fixture
 def csv_file_with_1k_lines_no_header() -> Generator[str, None, None]:
     yield from _generate_csv(1000, False)
 
 
-def _generate_csv(lines: int, header: bool):
-    with tempfile.NamedTemporaryFile() as temp_f:
-        with open(temp_f.name, "w") as open_f:
+@pytest.fixture(params=["csv_gz_file_with_1k_lines", "csv_file_with_1k_lines"])
+def csv_and_csv_gz_with_1k_lines(
+    request, csv_gz_file_with_1k_lines, csv_file_with_1k_lines
+):
+    if request.param == "csv_gz_file_with_1k_lines":
+        return csv_gz_file_with_1k_lines
+    else:
+        return csv_file_with_1k_lines
+
+
+def _generate_csv(
+    lines: int, header: bool, gz: bool = False
+) -> Generator[str, None, None]:
+    with tempfile.NamedTemporaryFile(suffix=".csv.gz" if gz else ".csv") as temp_f:
+        with gzip.open(temp_f.name, "wt") if gz else open(temp_f.name, "w") as open_f:
             writer = csv.DictWriter(open_f, fieldnames=["id", "name", "value"])
             if header:
                 writer.writeheader()

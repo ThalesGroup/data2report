@@ -61,12 +61,14 @@ class TestS3Utils:
 
 
 @mock_aws
-def test_report_with_s3(reports_bucket, reports_folder, csv_file_with_1k_lines):
+def test_report_with_s3(reports_bucket, reports_folder, csv_and_csv_gz_with_1k_lines):
     session = Session()
     s3_client = session.client("s3")
     s3_client.create_bucket(Bucket=get_reports_bucket())
-    key = "input-folder/input-key.csv.gz"
-    upload_file(reports_bucket, csv_file_with_1k_lines, key, session)
+    key = "input-folder/input-key.csv"
+    if csv_and_csv_gz_with_1k_lines.endswith(".gz"):
+        key += ".gz"
+    upload_file(reports_bucket, csv_and_csv_gz_with_1k_lines, key, session)
 
     mocked_response = {
         "usage": {"input_tokens": 10, "output_tokens": 20},
@@ -107,7 +109,7 @@ def test_upload_report(reports_bucket):
 
 @mock_aws
 def test_lambda_operations(
-    reports_bucket, reports_folder, monkeypatch, csv_file_with_1k_lines
+    reports_bucket, reports_folder, monkeypatch, csv_and_csv_gz_with_1k_lines
 ):
     session = Session()
     monkeypatch.setenv("DATA2REPORT_PREFIX", "data2report")
@@ -117,8 +119,10 @@ def test_lambda_operations(
     b64_conf = base64.b64encode(json.dumps(conf).encode("utf-8"))
     result = handle_event({"operation": "upload_report", "data": b64_conf})
     assert result["s3_key"] == "data2report/configuration/test_report.json"
-    input_key = "tmp/input/input.csv.gz"
-    upload_file(get_reports_bucket(), csv_file_with_1k_lines, input_key, session)
+    input_key = "tmp/input/input.csv"
+    if csv_and_csv_gz_with_1k_lines.endswith(".gz"):
+        input_key += ".gz"
+    upload_file(get_reports_bucket(), csv_and_csv_gz_with_1k_lines, input_key, session)
     full_key = f"s3://{get_reports_bucket()}/{input_key}"
     with mock_llm():
         result = handle_event(
