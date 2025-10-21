@@ -36,7 +36,9 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
     else:
         invalid_chars = set('/\\:*?"<>|')
         if any(c in configuration["id"] for c in invalid_chars):
-            errors.append("Report id contains invalid characters (e.g. /, \\, :, *, ?, \", <, >, |)")
+            errors.append(
+                'Report id contains invalid characters (e.g. /, \\, :, *, ?, ", <, >, |)'
+            )
     if report_id and configuration["id"] != report_id:
         errors.append(
             "Report id in configuration does not match the provided report_id"
@@ -71,7 +73,7 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
         if not isinstance(chunk, int) or chunk <= 0:
             errors.append("report.chunk_size must be a positive integer")
 
-        name = rpt.get("name")
+        name = configuration.get("name")
         if not isinstance(name, str) or not name.strip():
             errors.append("report.name is required and must be a non-empty string")
 
