@@ -68,6 +68,8 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
             errors.append("report.chunk_size must be a positive integer")
 
         incr = rpt.get("incremental")
+        if not isinstance(incr, bool):
+            errors.append("report.incremental must be a boolean value")
         workers = rpt.get("max_workers")
         if incr is True and workers != 1:
             errors.append("For incremental mode, report.max_workers must be 1")
