@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Optional, List
 
@@ -109,14 +110,18 @@ def get_config_s3_key(report_id: str) -> str:
 
 
 def get_report_config(report_id: str, session: Session = None) -> dict:
+    logging.info(f"getting report {report_id}")
     configuration_file = get_config_file(report_id)
     if is_s3_configured():
-        session = Session()
-        with open(configuration_file, mode="w") as f:
+        if not session:
+            session = Session()
+        if not os.path.exists(get_conf_folder()):
+            os.makedirs(get_conf_folder())
+        if not os.path.exists(configuration_file):
             download_object(
                 get_reports_bucket(),
                 get_config_s3_key(report_id),
-                f.name,
+                configuration_file,
                 session,
             )
     if not os.path.exists(configuration_file) or not os.path.isfile(configuration_file):

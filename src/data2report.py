@@ -73,7 +73,15 @@ def run_report(
     if not input_file:
         raise ValueError("input_file is required.")
     if is_s3_uri(input_file):
-        with NamedTemporaryFile(delete=False) as tmp:
+        last_dot = input_file.rfind(".")
+        with (
+            NamedTemporaryFile(
+                delete=False,
+                suffix=None if last_dot == -1 else input_file[last_dot:],
+            )
+            if last_dot
+            else None
+        ) as tmp:
             download_s3_uri(input_file, tmp.name, session=Session())
             input_file = tmp.name
     if not os.path.exists(input_file) or not os.path.isfile(input_file):

@@ -57,6 +57,11 @@ def deploy(version: str, update_config: bool = False, update_code: bool = True):
         return
     if update_config:
         print("Function exists. Updating config")
+        response = client.get_function_configuration(FunctionName=_get_function_name())
+        old_env = response.get("Environment", {}).get("Variables", {})
+        for e in old_env:
+            if e not in env_vars:
+                env_vars[e] = old_env[e]
         client.update_function_configuration(
             FunctionName=_get_function_name(),
             Description=description,
@@ -203,7 +208,9 @@ if __name__ == "__main__":
         uninstall_function()
     elif operation == "install":
         deploy(
-            os.environ.get("VERSION", "sources"), update_config=True, update_code=True
+            os.environ.get("VERSION", "sources"),
+            update_config=os.environ.get("UPDATE_CONFIG", "true").lower() == "true",
+            update_code=os.environ.get("UPDATE_CODE", "true").lower() == "true",
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
