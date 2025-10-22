@@ -50,7 +50,7 @@ def get_current_day() -> str:
     return str(datetime.today().date())
 
 
-def _get_report_run_partition_name() -> str:
+def get_report_run_partition_name() -> str:
     return os.environ.get("RUN_PARTITION", "run")
 
 
@@ -60,7 +60,7 @@ def get_report_folder(report_id: str, run_id: str) -> str:
         reports_folder,
         "reports",
         f"report={report_id}",
-        f"{_get_report_run_partition_name()}={run_id}",
+        f"{get_report_run_partition_name()}={run_id}",
     )
 
 
@@ -77,6 +77,7 @@ def get_json_lines(text: str) -> Generator[str, None, None]:
     if len(text) == 0:
         return
     current = 0
+    warnings = 0
     while True:
         newline = text.find("\n", current)
         start_json = (
@@ -85,10 +86,11 @@ def get_json_lines(text: str) -> Generator[str, None, None]:
             else text.find("{", current)
         )
         if start_json == -1:
-            # if logger.isEnabledFor(logging.DEBUG):
-            logging.warning(
-                f"Could not find start of json in text: {text[current:] if newline == -1 else text[current:newline]}"
-            )
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.warning(
+                    f"Could not find start of json in text: {text[current:] if newline == -1 else text[current:newline]}"
+                )
+            warnings += 1
         else:
             end_json = (
                 text.rfind("}", start_json)
@@ -96,11 +98,14 @@ def get_json_lines(text: str) -> Generator[str, None, None]:
                 else text.rfind("}", start_json, newline)
             )
             if end_json == -1:
-                # and logger.isEnabledFor(logging.DEBUG):
-                logging.warning(
-                    f"Could not find end of json in text: {text[start_json: newline] if newline != -1 else text[start_json:]}"
-                )
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.warning(
+                        f"Could not find end of json in text: {text[start_json: newline] if newline != -1 else text[start_json:]}"
+                    )
+                warnings += 1
             yield None if end_json == -1 else text[start_json : end_json + 1]
+        if warnings > 0:
+            logging.warning(f"Total warnings while parsing json lines: {warnings}")
         if newline == -1:
             return
         current = newline + 1

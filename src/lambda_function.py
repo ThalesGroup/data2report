@@ -9,6 +9,7 @@ from boto3.session import Session
 
 from conf_utils import save_report, get_report_config, delete_report
 from data2report import run_report
+from utils import get_report_run_partition_name
 
 _PREFIX_TO_REPORT_ENV_VAR = "PREFIX_TO_REPORT"
 
@@ -86,7 +87,7 @@ def _run_report(event):
         return {"error": "input_key not sent and event is not S3 put"}
     force = event.get("force", False)
     max_records = event.get("max_records")
-    run_id = event.get("run_id")
+    run_id = _get_run_id(event)
     return run_report(
         input_key,
         report_id,
@@ -105,6 +106,21 @@ def _get_input_key(event: dict) -> Optional[str]:
         return f"s3://{r["s3"]["bucket"]["name"]}/{key}"
     else:
         return None
+
+
+def _get_run_id(event: dict) -> Optional[str]:
+    if "run_id" in event:
+        return event["run_id"]
+    elif _is_s3_object_created_event(event):
+        key = _get_input_key(event)
+        par_name = get_report_run_partition_name()
+        parts = key.split("/")
+        for part in parts:
+            if part.startswith(par_name + "="):
+                run_id = part[len(par_name) + 1 :]
+                logging.info(f"Using run_id by source key: '{run_id}'")
+                return run_id
+    return None
 
 
 def _is_s3_object_created_event(event) -> bool:
