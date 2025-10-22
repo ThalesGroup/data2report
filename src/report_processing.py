@@ -9,6 +9,8 @@ from typing import Optional, Callable, Dict, Any
 from llm_utils import invoke_llm
 import concurrent.futures
 
+from utils import get_json_lines
+
 
 def process_chunks_folder(
     chunks_folder: str,
@@ -74,6 +76,7 @@ def process_chunks_folder(
                 os.path.join(chunks_folder, chunk_file),
                 llm_config,
                 report_file,
+                report_config.get("output_format"),
                 prev_report_file,
                 stop_event,
             )
@@ -170,6 +173,7 @@ def _process_report(
     input_file: str,
     llm_config: dict,
     output_file: str,
+    output_format: Optional[str] = None,
     prev_report_file: str = None,
     stop_event: Optional[threading.Event] = None,
 ) -> dict:
@@ -210,8 +214,7 @@ def _process_report(
             llm_config.get("temperature"),
         )
         usage = llm_result["usage"]
-        with gzip.open(output_file, "wt") as f:
-            f.write(llm_result["content"])
+        _write_output_file(output_file, llm_result["content"], output_format)
     duration = (datetime.now() - start_time).seconds
     return {
         "exists": exists,
@@ -219,6 +222,21 @@ def _process_report(
         "duration-seconds": duration,
         "_chunk_index": chunk_index,
     }
+
+
+def _write_output_file(output_file: str, content: str, output_format: Optional[str]):
+    if output_format is None:
+        with gzip.open(output_file, "wt") as f:
+            f.write(content)
+    elif output_format == "jsonl":
+        logging.info(f"Writing {output_file} as JSONL")
+        with gzip.open(output_file, "wt") as f:
+            for line in get_json_lines(content):
+                if line:
+                    f.write(line)
+                    f.write("\n")
+    else:
+        raise ValueError(f"Unsupported output format: {output_format}")
 
 
 def _file_to_prompt_data(input_file: str) -> str:

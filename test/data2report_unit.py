@@ -1,3 +1,5 @@
+import gzip
+import json
 import os
 
 import pytest
@@ -63,3 +65,21 @@ def test_generate_report_change_input(
         assert result["chunks_skipped"] == 3
         result = run_report(csv_file_with_500_lines, configuration=config, force=False)
         assert result["chunks_skipped"] == 0
+
+
+def test_generate_report_jsonl_output_mixed_json(
+    reports_folder, csv_file_with_1k_lines
+):
+    config = get_config("test_report")
+    config["report"]["output_format"] = "jsonl"
+    with mock_llm("{}\n\n{}\nInvalid JSON\n{\n}\nPrefix{}Suffix"):
+        result = run_report(
+            csv_file_with_1k_lines,
+            configuration=config,
+        )
+        output_file = os.path.join(result["output_folder"], "final_report.gz")
+        result = []
+        with gzip.open(output_file, "rt") as out_f:
+            for line in out_f:
+                result.append(json.loads(line))
+        assert result == [{}, {}, {}]

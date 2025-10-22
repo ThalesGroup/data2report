@@ -113,6 +113,7 @@ def test_lambda_operations(
 ):
     session = Session()
     monkeypatch.setenv("DATA2REPORT_PREFIX", "data2report")
+    monkeypatch.setenv("RUN_PARTITION", "day")
     s3_client = session.client("s3")
     s3_client.create_bucket(Bucket=get_reports_bucket())
     conf = get_config("test_report")
@@ -130,14 +131,14 @@ def test_lambda_operations(
         )
         assert (
             result["s3_uri"]
-            == f"s3://my-bucket/data2report/reports/report=test_report/run={date.today()}/final_report.gz"
+            == f"s3://my-bucket/data2report/reports/report=test_report/day={date.today()}/final_report.gz"
         )
         result = handle_event(
             {"operation": "run_report", "report_id": conf["id"], "input_key": full_key}
         )
         assert (
             result["s3_uri"]
-            == f"s3://my-bucket/data2report/reports/report=test_report/run={date.today()}/final_report.gz"
+            == f"s3://my-bucket/data2report/reports/report=test_report/day={date.today()}/final_report.gz"
         )
     result = handle_event({"operation": "delete_report", "report_id": conf["id"]})
     assert result["s3_key"] == "data2report/configuration/test_report.json"

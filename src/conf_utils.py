@@ -86,6 +86,10 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
         if incr is False and (not isinstance(workers, int) or workers < 1):
             errors.append("report.max_workers must be >=1")
 
+        out_fmt = rpt.get("output_format")
+        if out_fmt is not None and out_fmt not in ("csv", "jsonl"):
+            errors.append("report.output_format must be 'csv' or 'jsonl'")
+
         input_conf = rpt.get("input")
         if input_conf is not None:
             if not isinstance(input_conf, dict):

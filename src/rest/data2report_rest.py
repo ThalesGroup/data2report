@@ -160,7 +160,7 @@ def _get_report():
         )
     with gzip.open(report_file_name, "rt") as report_file:
         content = report_file.read()
-    return jsonify({"report": content})
+    return Response(content, mimetype="text/plain")
 
 
 @app.route("/progress/stream", methods=["GET"])

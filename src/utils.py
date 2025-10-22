@@ -3,6 +3,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Generator
 
 _PROJECT_FOLDER = Path(os.path.dirname(os.path.abspath(__file__))).parent.absolute()
 
@@ -49,12 +50,59 @@ def get_current_day() -> str:
     return str(datetime.today().date())
 
 
+def _get_report_run_partition_name() -> str:
+    return os.environ.get("RUN_PARTITION", "run")
+
+
 def get_report_folder(report_id: str, run_id: str) -> str:
     reports_folder = get_reports_folder()
     return os.path.join(
-        reports_folder, "reports", f"report={report_id}", f"run={run_id}"
+        reports_folder,
+        "reports",
+        f"report={report_id}",
+        f"{_get_report_run_partition_name()}={run_id}",
     )
 
 
 def get_final_report_name() -> str:
     return "final_report.gz"
+
+
+def get_json_lines(text: str) -> Generator[str, None, None]:
+    """
+    split text into json lines, per line remove leading and trailing info before and after the json
+    :param text:
+    :return:
+    """
+    if len(text) == 0:
+        return
+    current = 0
+    while True:
+        newline = text.find("\n", current)
+        start_json = (
+            text.find("{", current, newline)
+            if newline != -1
+            else text.find("{", current)
+        )
+        if start_json == -1:
+            # if logger.isEnabledFor(logging.DEBUG):
+            logging.warning(
+                f"Could not find start of json in text: {text[current:] if newline == -1 else text[current:newline]}"
+            )
+        else:
+            end_json = (
+                text.rfind("}", start_json)
+                if newline == -1
+                else text.rfind("}", start_json, newline)
+            )
+            if end_json == -1:
+                # and logger.isEnabledFor(logging.DEBUG):
+                logging.warning(
+                    f"Could not find end of json in text: {text[start_json: newline] if newline != -1 else text[start_json:]}"
+                )
+            yield None if end_json == -1 else text[start_json : end_json + 1]
+        if newline == -1:
+            return
+        current = newline + 1
+        if current == len(text):
+            return
