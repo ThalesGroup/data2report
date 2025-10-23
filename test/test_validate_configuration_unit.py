@@ -136,39 +136,34 @@ class TestValidateConfigurationReport:
 
 class TestValidateConfigurationInput:
     def test_input_non_object(self, valid_configuration):
-        cfg = {**valid_configuration}
-        cfg["report"] = {**cfg["report"], "input": "csv"}
+        cfg = {**valid_configuration, "input": "csv"}
         errs = validate_configuration(cfg, None)
-        assert "report.input must be an object when provided" in errs
+        assert "input must be an object when provided" in errs
 
     @pytest.mark.parametrize("fmt", ["parquet", "txt", "", None])
     def test_input_format_invalid_values(self, valid_configuration, fmt):
-        cfg = {**valid_configuration}
-        cfg["report"] = {**cfg["report"], "input": {"format": fmt}}
+        cfg = {**valid_configuration, "input": {"format": fmt}}
         errs = validate_configuration(cfg, None)
         # If fmt is None => allowed (missing)
         # provided and not csv/jsonl => error
         if fmt is None:
-            assert not any("report.input.format" in e for e in errs)
+            assert not any("input.format" in e for e in errs)
         else:
-            assert "report.input.format must be 'csv' or 'jsonl'" in errs
+            assert "input.format must be 'csv' or 'jsonl'" in errs
 
     @pytest.mark.parametrize("fmt", ["csv", "jsonl"])
     def test_input_format_valid_values(self, valid_configuration, fmt):
-        cfg = {**valid_configuration}
-        cfg["report"] = {**cfg["report"], "input": {"format": fmt}}
+        cfg = {**valid_configuration, "input": {"format": fmt}}
         errs = validate_configuration(cfg, None)
-        assert not any("report.input.format" in e for e in errs)
+        assert not any("input.format" in e for e in errs)
 
     def test_input_header_type_invalid(self, valid_configuration):
-        cfg = {**valid_configuration}
-        cfg["report"] = {**cfg["report"], "input": {"header": "true"}}
+        cfg = {**valid_configuration, "input": {"header": "true"}}
         errs = validate_configuration(cfg, None)
-        assert "report.input.header must be a boolean" in errs
+        assert "input.header must be a boolean" in errs
 
     @pytest.mark.parametrize("header", [True, False])
     def test_input_header_type_valid(self, valid_configuration, header):
-        cfg = {**valid_configuration}
-        cfg["report"] = {**cfg["report"], "input": {"header": header}}
+        cfg = {**valid_configuration, "input": {"header": header}}
         errs = validate_configuration(cfg, None)
-        assert not any("report.input.header" in e for e in errs)
+        assert not any("input.header" in e for e in errs)

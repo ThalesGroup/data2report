@@ -90,17 +90,17 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
         if out_fmt is not None and out_fmt not in ("csv", "jsonl"):
             errors.append("report.output_format must be 'csv' or 'jsonl'")
 
-        input_conf = rpt.get("input")
+        input_conf = configuration.get("input")
         if input_conf is not None:
             if not isinstance(input_conf, dict):
-                errors.append("report.input must be an object when provided")
+                errors.append("input must be an object when provided")
             else:
                 fmt = input_conf.get("format")
                 if fmt is not None and fmt not in ("csv", "jsonl"):
-                    errors.append("report.input.format must be 'csv' or 'jsonl'")
+                    errors.append("input.format must be 'csv' or 'jsonl'")
                 header = input_conf.get("header")
                 if header is not None and not isinstance(header, bool):
-                    errors.append("report.input.header must be a boolean")
+                    errors.append("input.header must be a boolean")
 
     return errors
 
