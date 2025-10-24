@@ -167,3 +167,25 @@ class TestValidateConfigurationInput:
         cfg = {**valid_configuration, "input": {"header": header}}
         errs = validate_configuration(cfg, None)
         assert not any("input.header" in e for e in errs)
+
+
+class TestValidateConfigurationRootKeys:
+    def test_no_unknown_keys(self, valid_configuration):
+        errs = validate_configuration(valid_configuration, None)
+        assert not any("Unknown keys at root" in e for e in errs)
+
+    def test_one_unknown_key(self, valid_configuration):
+        cfg = {**valid_configuration, "extra": 123}
+        errs = validate_configuration(cfg, None)
+        assert "Unknown keys at root: extra" in errs
+
+    def test_multiple_unknown_keys(self, valid_configuration):
+        cfg = {**valid_configuration, "foo": 1, "bar": 2}
+        errs = validate_configuration(cfg, None)
+        assert "Unknown keys at root: bar, foo" in errs
+
+    def test_allowed_keys_only(self, valid_configuration):
+        allowed = {"name", "id", "llm", "report", "input"}
+        cfg = {k: valid_configuration[k] for k in allowed if k in valid_configuration}
+        errs = validate_configuration(cfg, None)
+        assert not any("Unknown keys at root" in e for e in errs)
