@@ -29,6 +29,10 @@ def invoke_llm(
 
 def _invoke_bedrock_model(prompt_body: dict, model_id: str, session: Session) -> dict:
     region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    if model_id.startswith("inference-profile/"):
+        sts_client = session.client("sts")
+        account_id = sts_client.get_caller_identity()["Account"]
+        model_id = f"arn:aws:bedrock:{region}:{account_id}:{model_id}"
     bedrock_client = session.client(
         service_name="bedrock-runtime",
         region_name=region,

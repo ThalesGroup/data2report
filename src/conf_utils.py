@@ -21,6 +21,7 @@ VALID_PREFIXES = (
     "amazon.titan-text-",
     "amazon.nova-",
     "arn:aws:bedrock:",
+    "inference-profile/",
 )
 
 
