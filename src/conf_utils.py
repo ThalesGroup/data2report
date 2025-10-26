@@ -33,6 +33,10 @@ def _has_valid_model_prefix(model_id: str) -> bool:
 
 def validate_configuration(configuration: dict, report_id: Optional[str]) -> List[str]:
     errors = []
+    allowed_keys = {"name", "id", "llm", "report", "input"}
+    unknown_keys = set(configuration.keys()) - allowed_keys
+    if unknown_keys:
+        errors.append(f"Unknown keys at root: {', '.join(sorted(unknown_keys))}")
     if "id" not in configuration or not configuration["id"]:
         errors.append("Missing report id")
     else:
