@@ -20,6 +20,7 @@ VALID_PREFIXES = (
     "ai21.jamba-",
     "amazon.titan-text-",
     "amazon.nova-",
+    "arn:aws:bedrock:",
 )
 
 
