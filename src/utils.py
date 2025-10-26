@@ -71,8 +71,8 @@ def get_final_report_name() -> str:
 def get_json_lines(text: str) -> Generator[str, None, None]:
     """
     split text into json lines, per line remove leading and trailing info before and after the json
-    :param text:
-    :return:
+    :param text: input text
+    :return: generator lines with JSON data
     """
     if len(text) == 0:
         return
@@ -104,10 +104,11 @@ def get_json_lines(text: str) -> Generator[str, None, None]:
                     )
                 warnings += 1
             yield None if end_json == -1 else text[start_json : end_json + 1]
-        if warnings > 0:
-            logging.warning(f"Total warnings while parsing json lines: {warnings}")
         if newline == -1:
-            return
+            break
         current = newline + 1
         if current == len(text):
-            return
+            break
+    if warnings > 0:
+        logging.warning(f"Total warnings while parsing json lines: {warnings}")
+    return
