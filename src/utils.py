@@ -103,7 +103,8 @@ def get_json_lines(text: str) -> Generator[str, None, None]:
                         f"Could not find end of json in text: {text[start_json: newline] if newline != -1 else text[start_json:]}"
                     )
                 warnings += 1
-            yield None if end_json == -1 else text[start_json : end_json + 1]
+            if end_json != -1:
+                yield text[start_json : end_json + 1]
         if newline == -1:
             break
         current = newline + 1
