@@ -101,6 +101,7 @@ def run_report(
         raise FileNotFoundError(f"Report folder '{reports_folder}' does not exist")
     if not run_id:
         run_id = get_current_day()
+    chunk_size = configuration["report"]["chunk_size"]
     if not work_folder:
         work_folder = os.path.join(
             reports_folder, "work", f"report={report_id}", f"run={run_id}"
@@ -111,7 +112,7 @@ def run_report(
         if not force and input_details:
             if (
                 input_details["input_size_bytes"] == os.path.getsize(input_file)
-                and input_details["chunk_size"] == configuration["report"]["chunk_size"]
+                and input_details["chunk_size"] == chunk_size
             ):
                 input_details_match = True
             else:
@@ -124,22 +125,20 @@ def run_report(
         if not os.path.exists(work_folder):
             os.makedirs(work_folder)
         if not input_details_match:
-            _write_input_details(
-                input_details_file, input_file, configuration["report"]["chunk_size"]
-            )
+            _write_input_details(input_details_file, input_file, chunk_size)
     chunks_folder = os.path.join(work_folder, "chunks")
     if not max_records:
         max_records = configuration["report"].get("max_records")
     chunks, records = split_input_file(
         chunks_folder,
         input_file,
-        configuration["report"]["chunk_size"],
+        chunk_size,
         max_records,
         input_format=configuration.get("input", {}).get("format"),
         header=configuration.get("input", {}).get("header"),
     )
     logging.info(
-        f"Report '{report_id}' run '{run_id}' prepared: {chunks} chunks, {records} records"
+        f"Report '{report_id}' run '{run_id}' chunk size '{chunk_size}' prepared: {chunks} chunks, {records} records"
     )
     report_chunks_folder = os.path.join(work_folder, "chunk_reports")
     process_result = process_chunks_folder(

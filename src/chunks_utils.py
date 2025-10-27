@@ -2,7 +2,7 @@ import gzip
 import json
 import logging
 import os
-from typing import TextIO
+from typing import TextIO, Tuple, Optional
 
 
 def _smart_open(path: str, mode: str = "rt") -> TextIO:
@@ -21,7 +21,7 @@ def split_input_file(
     max_records: int = None,
     input_format: str = None,
     header: bool = False,
-) -> (int, int):
+) -> Tuple[int, Optional[int]]:
     """
         Splits the input file into chunks and stores them in the specified chunk folder.
     ´
