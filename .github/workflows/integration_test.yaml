@@ -47,6 +47,8 @@ jobs:
 
       - name: Run integration tests
         timeout-minutes: 2
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           source .venv/bin/activate
           PYTHONPATH=src:test python -m pytest --color=yes test/test_*_integration.py
