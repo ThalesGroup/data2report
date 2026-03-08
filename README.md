@@ -62,5 +62,9 @@ To reduce costs and latency, the system applies preprocessing steps that minimiz
 ### Integrations  
 While the system does not directly connect to databases, it is designed to work smoothly with exported data. This approach encourages preprocessing—such as filtering and aggregating—before the data enters the reporting workflow, which helps improve both cost efficiency and performance. For example, AWS Athena can be used to generate the input files that feed into data2report, streamlining the integration of large-scale data sources.  
 
-### Deployment  
-Deployment is flexible, with multiple options to suit different environments. The system can run as a Docker container, providing reproducibility and consistency whether on a local machine, on-premises infrastructure, or in the cloud. For lightweight, event-driven use cases, AWS Lambda offers a serverless deployment option that minimizes infrastructure management. Both output reports and intermediate data can be stored locally or in object stores, depending on operational needs.  
+### Deployment
+Deployment is flexible, with multiple options to suit different environments. The system can run as a Docker container, providing reproducibility and consistency whether on a local machine, on-premises infrastructure, or in the cloud. For lightweight, event-driven use cases, AWS Lambda offers a serverless deployment option that minimizes infrastructure management. Both output reports and intermediate data can be stored locally or in object stores, depending on operational needs.
+
+## License ⚖️
+This package is distributed under the Apache 2.0 license. All dependencies have their own license
+x§x§
