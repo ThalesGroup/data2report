@@ -67,4 +67,3 @@ Deployment is flexible, with multiple options to suit different environments. Th
 
 ## License ⚖️
 This package is distributed under the Apache 2.0 license. All dependencies have their own license
-x§x§
