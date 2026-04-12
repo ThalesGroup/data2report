@@ -30,8 +30,7 @@ def set_aws_api_key():
 @pytest.mark.parametrize(
     "model_id",
     [
-        "anthropic.claude-3-haiku-20240307-v1:0",
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "inference-profile/us.anthropic.claude-sonnet-4-6",
         "ai21.jamba-1-5-mini-v1:0",
         "amazon.nova-lite-v1:0",
         "amazon.nova-micro-v1:0",
