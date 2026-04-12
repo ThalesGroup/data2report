@@ -11,16 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import base64
 import gzip
+import json
 import os.path
 
 import pytest
 from boto3.session import Session
 
-from conftest import get_resources_folder
+from conftest import get_resources_folder, get_config
 from data2report import run_report
-from s3_utils import get_reports_bucket, clear_folder, get_data2report_prefix
+from lambda_function import lambda_handler
+from s3_utils import (
+    get_reports_bucket,
+    clear_folder,
+    get_data2report_prefix,
+    upload_file,
+)
 from utils import init_env_from_file
 
 _TEST_BUCKET_NAME = "data2report"
@@ -45,7 +52,7 @@ _CONF = {
     "name": "Test Report",
     "input": {"format": "csv", "header": True},
     "llm": {
-        "model_id": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "model_id": "inference-profile/us.anthropic.claude-sonnet-4-6",
         "system_prompt": "Here is a web attacks dataset, please analyze it and return ONLY interesting finding for investigation. Return the result in jsonl format top insights. Only actionable ones (with specific urls). Not about specific attacks. do not include any prefix or suffix. only jsonl. One json object per line with finding title and description. Here is the data:\n",
         "temperature": 0.3,
         "max_tokens": 100,
@@ -75,3 +82,36 @@ def test_run_report(reports_folder, reports_bucket):
         output_lines = f.readlines()
     assert result["llm_usage"]["output_tokens"] > 0
     assert len(output_lines) > 0
+
+
+def test_lambda_handler(reports_folder, reports_bucket, csv_file_with_500_lines):
+    session = Session()
+    clear_folder(
+        reports_bucket, get_data2report_prefix() + "reports/report=test_report", session
+    )
+    conf = get_config("test_report")
+    b64_conf = base64.b64encode(json.dumps(conf).encode("utf-8"))
+    result = lambda_handler({"operation": "upload_report", "data": b64_conf}, None)
+    assert result["s3_key"] == "data2report/configuration/test_report.json"
+    input_key = "tmp/input/input.csv"
+    if csv_file_with_500_lines.endswith(".gz"):
+        input_key += ".gz"
+    upload_file(get_reports_bucket(), csv_file_with_500_lines, input_key, session)
+    full_key = f"s3://{get_reports_bucket()}/{input_key}"
+    result = lambda_handler(
+        {"operation": "run_report", "report_id": conf["id"], "input_key": full_key},
+        None,
+    )
+    assert result["report_id"] == "test_report"
+    assert isinstance(result["run_id"], str) and len(result["run_id"]) == 10 and result["run_id"].count("-") == 2
+    assert result["chunks"] == 1
+    assert result["records"] == 500
+    assert result["records_limit_reached"] is False
+    assert result["stopped"] is False
+    assert result["chunks_skipped"] == 0
+    assert result["duration_seconds"] > 0
+    assert result["longest_chunk_duration_seconds"] > 0
+    assert result["llm_usage"]["input_tokens"] > 0
+    assert result["llm_usage"]["output_tokens"] > 0
+    assert "s3_uri" in result
+    assert result["s3_uri"].startswith("s3://data2report")
