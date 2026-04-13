@@ -253,9 +253,15 @@ form.addEventListener('submit', async (event) => {
     // JSON-first + single link
     const container = resultPre.parentElement;
     [...container.querySelectorAll('a.__open_report_link')].forEach(n => n.remove());
+    const textResp = await res.text();
+    let displayContent = textResp;
+    let errorMsg = null;
+
     try {
-      const payload = await res.json();
-      resultPre.textContent = JSON.stringify(payload, null, 2);
+      const payload = JSON.parse(textResp);
+      displayContent = JSON.stringify(payload, null, 2);
+      if (!res.ok) errorMsg = payload.error || payload.errors?.join('; ') || displayContent;
+      
       updateClearButtonState();
       if (payload.report_id && payload.run_id) {
         const a = document.createElement('a');
@@ -266,8 +272,11 @@ form.addEventListener('submit', async (event) => {
         container.appendChild(a);
       }
     } catch {
-      resultPre.textContent = await res.text();
+      if (!res.ok) errorMsg = textResp;
     }
+
+    resultPre.textContent = displayContent;
+    if (errorMsg) alert('Failed to submit: ' + errorMsg);
   } catch (e) {
     setStatus('Network error');
     alert('Failed to submit: ' + (e?.message || e));

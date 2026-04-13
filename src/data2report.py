@@ -111,8 +111,10 @@ def run_report(
     conf_errors = validate_configuration(configuration, report_id)
     if len(conf_errors) > 0:
         raise ValueError(f"Invalid report configuration: {conf_errors}")
-    if not os.path.exists(reports_folder) or not os.path.isdir(reports_folder):
-        raise FileNotFoundError(f"Report folder '{reports_folder}' does not exist")
+    if not os.path.exists(reports_folder):
+        os.makedirs(reports_folder, exist_ok=True)
+    elif not os.path.isdir(reports_folder):
+        raise NotADirectoryError(f"Report folder '{reports_folder}' is not a directory")
     if not run_id:
         run_id = get_current_day()
     chunk_size = configuration["report"]["chunk_size"]

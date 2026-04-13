@@ -118,18 +118,22 @@ def _report():
     stop_ev = get_stop_event(cfg["id"], run_id)
     stop_ev.clear()
 
-    with tempfile.NamedTemporaryFile(suffix=file.filename) as tmp_file:
-        file.save(tmp_file.name)
-        result = run_report(
-            input_file=tmp_file.name,
-            configuration=cfg,
-            max_records=max_records,
-            force=force,
-            run_id=run_id,
-            progress_cb=progress_cb,
-            stop_event=stop_ev,
-        )
-    return jsonify(result)
+    try:
+        with tempfile.NamedTemporaryFile(suffix=file.filename) as tmp_file:
+            file.save(tmp_file.name)
+            result = run_report(
+                input_file=tmp_file.name,
+                configuration=cfg,
+                max_records=max_records,
+                force=force,
+                run_id=run_id,
+                progress_cb=progress_cb,
+                stop_event=stop_ev,
+            )
+        return jsonify(result)
+    except Exception as e:
+        logging.exception("Error during report run")
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/validate", methods=["POST"])
