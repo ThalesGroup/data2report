@@ -11,6 +11,7 @@ venv.bak/
 .idea/
 
 do-not-commit/*
+node_modules/
 **/.pytest_cache
 aws/**/config
 **/__pycache__/

@@ -1,102 +1,605 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8"/>
-    <meta content="width=device-width, initial-scale=1" name="viewport"/>
-    <title>data2report • Run Report</title>
-    <link href="static/data2report_favicon.png" rel="icon" type="image/png"/>
-    <link href="static/style.css" rel="stylesheet" type="text/css"/>
-    <script defer src="static/data2report.js" type="text/javascript"></script>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1" name="viewport"/>
+  <title>data2report</title>
+  <link href="static/data2report_favicon.png" rel="icon" type="image/png"/>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class', theme: { extend: {} } }</script>
+
+  <script defer src="static/cfg-utils.js"></script>
+  <script defer src="static/report-parser.js"></script>
+  <script defer src="static/data2report.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link href="static/style.css" rel="stylesheet"/>
 </head>
-<body>
-<div class="container">
-    <div aria-label="Run Report form" class="card" role="region">
-        <div class="card-header">
-            <div aria-hidden="true" class="logo">data2report</div>
-            <div>
-                <h1 class="title">LLM-Based Data Reporting System</h1>
-                <p class="sub">Upload data and a JSON configuration to generate a report</p>
-            </div>
+
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors"
+      x-data="appData()" x-init="init()">
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<header class="sticky top-0 z-20 bg-white/90 dark:bg-gray-900/90 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+  <div class="max-w-4xl mx-auto px-4 h-13 flex items-center gap-3 py-3">
+    <span class="logo-badge">data2report</span>
+    <span class="text-sm text-gray-400 dark:text-gray-500 hidden sm:block">LLM-Based Data Reporting</span>
+    <!-- Saved configs -->
+    <div class="flex items-center gap-2 ml-4 hidden sm:flex">
+      <select x-model="selectedSavedReport" class="input-sm max-w-[160px]">
+        <option value="">— saved configs —</option>
+        <template x-for="id in savedReports" :key="id">
+          <option :value="id" x-text="id"></option>
+        </template>
+      </select>
+      <button @click="loadConfig()" class="btn-sm-ghost">Load</button>
+      <button @click="saveConfig()" :disabled="!isDirty" class="btn-sm-ghost">
+        Save<span x-show="isDirty" class="ml-1 w-1.5 h-1.5 rounded-full bg-amber-400 inline-block align-middle"></span>
+      </button>
+    </div>
+    <button @click="toggleTheme()" class="ml-auto p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+      <svg x-show="theme === 'dark'" class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <svg x-show="theme === 'light'" class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<main class="max-w-4xl mx-auto px-4 py-8 pb-12 space-y-6">
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <button @click="activeTab = 'config'" :class="activeTab === 'config' ? 'tab-active' : 'tab-inactive'">
+      Configuration
+      <span x-show="isDirty" class="ml-1 w-1.5 h-1.5 rounded-full bg-amber-400 inline-block align-middle"></span>
+    </button>
+    <button @click="activeTab = 'model'" :class="activeTab === 'model' ? 'tab-active' : 'tab-inactive'">
+      Model
+    </button>
+    <button @click="activeTab = 'run'" :class="activeTab === 'run' ? 'tab-active' : 'tab-inactive'">
+      Run
+      <span x-show="isRunning" class="ml-1 w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse inline-block align-middle"></span>
+    </button>
+    <button @click="activeTab = 'history'" :class="activeTab === 'history' ? 'tab-active' : 'tab-inactive'">
+      History
+      <span x-show="history.length > 0" class="ml-1 text-xs font-normal text-gray-400" x-text="'(' + history.length + ')'"></span>
+    </button>
+  </div>
+
+  <!-- ── Tab: Configuration ─────────────────────────────────────────── -->
+  <section x-show="activeTab === 'config'" x-transition.opacity.duration.150ms>
+    <div class="card divide-y divide-gray-100 dark:divide-gray-800">
+
+      <!-- Report identity -->
+      <div class="form-section">
+        <h3 class="form-section-title">Report</h3>
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="cfg-id">ID <span class="required">*</span></label>
+            <input id="cfg-id" type="text" x-model="cfg.id" @input="markDirty()"
+                   placeholder="my_report" class="input-base"
+                   :class="fieldErr('id') ? 'input-err' : ''"/>
+            <p class="field-hint">Used for file names and URLs — no spaces or special chars</p>
+            <p x-show="fieldErr('id')" class="field-error" x-text="fieldErr('id')"></p>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="cfg-name">Name <span class="required">*</span></label>
+            <input id="cfg-name" type="text" x-model="cfg.name" @input="markDirty()"
+                   placeholder="My Report" class="input-base"
+                   :class="fieldErr('name') ? 'input-err' : ''"/>
+            <p class="field-hint">Human-readable display name</p>
+            <p x-show="fieldErr('name')" class="field-error" x-text="fieldErr('name')"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Processing -->
+      <div class="form-section">
+        <h3 class="form-section-title">Processing</h3>
+
+        <div class="toggle-row mb-4">
+          <div>
+            <p class="field-label mb-0">Incremental mode</p>
+            <p class="field-hint">Each chunk receives the previous chunk's result as context. Forces workers = 1.</p>
+          </div>
+          <button type="button" @click="cfg.report.incremental = !cfg.report.incremental; if(cfg.report.incremental) cfg.report.max_workers = 1; markDirty()"
+                  class="toggle" :class="cfg.report.incremental ? 'toggle--on' : ''">
+            <span class="toggle-thumb" :class="cfg.report.incremental ? 'translate-x-5' : 'translate-x-0'"></span>
+          </button>
         </div>
 
-        <form action="/report" enctype="multipart/form-data" id="reportForm" method="post" novalidate>
-            <div class="grid">
-                <div class="field">
-                    <div class="field">
-                        <div class="toolbar toolbar--wrap">
-                            <div class="field field--compact">
-                                <label for="savedReports">Saved reports</label>
-                                <select id="savedReports"></select>
-                                <div class="hint">Choose a saved configuration to load</div>
-                            </div>
-                            <button class="btn ghost" id="btnLoad" type="button">Load</button>
-                            <button type="button" class="btn ghost" id="btnSave" disabled>Save</button>
-                            <button class="btn ghost" id="btnFormat" type="button">Format</button>
-                            <button class="btn ghost" id="btnExample" type="button">Load example</button>
-                        </div>
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="cfg-chunk">Chunk size <span class="required">*</span></label>
+            <input id="cfg-chunk" type="number" min="1" step="1"
+                   x-model.number="cfg.report.chunk_size" @input="markDirty()"
+                   placeholder="100" class="input-base"
+                   :class="fieldErr('report.chunk_size') ? 'input-err' : ''"/>
+            <p class="field-hint">Rows per LLM call</p>
+            <p x-show="fieldErr('report.chunk_size')" class="field-error" x-text="fieldErr('report.chunk_size')"></p>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="cfg-workers">
+              Workers
+              <span x-show="cfg.report.incremental" class="text-xs font-normal text-amber-500">(locked to 1)</span>
+            </label>
+            <input id="cfg-workers" type="number" min="1" step="1"
+                   x-model.number="cfg.report.max_workers" @input="markDirty()"
+                   :disabled="cfg.report.incremental"
+                   placeholder="4" class="input-base"
+                   :class="cfg.report.incremental ? 'opacity-40 cursor-not-allowed' : ''"/>
+            <p class="field-hint">Parallel chunk processing threads</p>
+          </div>
+        </div>
 
-                        <label for="config">Configuration JSON</label>
-                        <textarea aria-describedby="configHint" class="textarea--tall" id="config" name="config"
-                                  placeholder='{"id":"report_id", ...}'></textarea>
-                        <div class="hint" id="configHint">Press “Format” to pretty-print and validate JSON</div>
-                        <div aria-live="polite" class="chips" id="lintChips"></div>
-                    </div>
-                </div>
+        <div class="field-group mt-4">
+          <label class="field-label">Output format <span class="text-xs font-normal text-gray-400">(optional)</span></label>
+          <div class="seg-control">
+            <template x-for="opt in [{v:null,l:'Auto'},{v:'csv',l:'CSV'},{v:'jsonl',l:'JSONL'}]" :key="opt.l">
+              <button type="button" @click="cfg.report.output_format = opt.v; markDirty()"
+                      :class="cfg.report.output_format === opt.v ? 'seg-active' : 'seg-inactive'"
+                      x-text="opt.l"></button>
+            </template>
+          </div>
+        </div>
+      </div>
 
-                <div class="field">
-                    <label for="file">Data file</label>
-                    <div aria-label="Drop or choose a CSV or JSONL file" class="dropzone" id="dropzone" role="button"
-                         tabindex="0">
-                        <div>
-                            <div class="dz-title">Drag & drop</div>
-                            <div class="hint">CSV, JSONL, or compressed (.gz)</div>
-                        </div>
-                    </div>
-                    <input accept=".csv,.jsonl,.gz,text/csv,application/gzip" class="hidden" id="file" name="file"
-                           type="file"/>
-
-                    <div class="row">
-                        <div class="field">
-                            <label for="maxRecords">Max records (optional)</label>
-                            <input id="maxRecords" min="1" name="max_records" placeholder="no limit" step="1"
-                                   type="number"/>
-
-                            <div class="field field--inline field--mt-12">
-                                <input class="mr-8" id="force" name="force" type="checkbox" value="true"/>
-                                <label class="mb-0" for="force">Force (clear work folder before run)</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row row--mt-18">
-                        <button class="btn" type="submit" disabled>Run report</button>
-                        <button class="btn ghost" id="btnStop" type="button">Stop</button>
-                        <button class="btn ghost" id="btnClear" type="button">Clear</button>
-                    </div>
-                </div>
+      <!-- Input options -->
+      <div class="form-section">
+        <h3 class="form-section-title">Input <span class="text-xs font-normal text-gray-400">(optional)</span></h3>
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label">Format</label>
+            <div class="seg-control">
+              <template x-for="opt in [{v:null,l:'Auto'},{v:'csv',l:'CSV'},{v:'jsonl',l:'JSONL'}]" :key="opt.l">
+                <button type="button" @click="cfg.input.format = opt.v; markDirty()"
+                        :class="cfg.input.format === opt.v ? 'seg-active' : 'seg-inactive'"
+                        x-text="opt.l"></button>
+              </template>
             </div>
-
-            <div class="footer">
-                <div aria-hidden="true" class="progress">
-                    <div class="bar" id="bar"></div>
-                </div>
-                <div class="status" id="status">Idle</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">CSV header row</label>
+            <div class="seg-control">
+              <template x-for="opt in [{v:null,l:'Auto'},{v:true,l:'Yes'},{v:false,l:'No'}]" :key="opt.l">
+                <button type="button" @click="cfg.input.header = opt.v; markDirty()"
+                        :class="cfg.input.header === opt.v ? 'seg-active' : 'seg-inactive'"
+                        x-text="opt.l"></button>
+              </template>
             </div>
+          </div>
+        </div>
+      </div>
 
-            <div class="result" hidden id="result">
-                <div class="row row--mb-8">
-                    <strong>Response</strong>
-                    <div class="row row--gap-8 row--justify-end">
-                        <button class="btn ghost" id="btnCopy" type="button">Copy</button>
-                        <button class="btn ghost" id="btnDownload" type="button">Download</button>
-                    </div>
-                </div>
-                <pre id="resultPre"></pre>
-            </div>
-
-            <div class="progress-pane" id="progressPane"></div>
-        </form>
     </div>
+  </section>
+
+  <!-- ── Tab: Model ─────────────────────────────────────────────────── -->
+  <section x-show="activeTab === 'model'" x-transition.opacity.duration.150ms>
+    <div class="card">
+      <div class="form-section space-y-4">
+
+        <div class="field-group">
+          <label class="field-label" for="cfg-model">Model ID <span class="required">*</span></label>
+          <input id="cfg-model" type="text" list="model-suggestions"
+                 x-model="cfg.llm.model_id" @input="markDirty()"
+                 placeholder="anthropic.claude-3-5-sonnet-20241029-v2:0"
+                 class="input-base font-mono text-xs"
+                 :class="fieldErr('llm.model_id') ? 'input-err' : ''"/>
+          <datalist id="model-suggestions">
+            <template x-for="m in modelOptions" :key="m.value">
+              <option :value="m.value" :label="m.provider + ' — ' + m.label"></option>
+            </template>
+          </datalist>
+          <p class="field-hint">Bedrock model ID, ARN, inference profile, or <code>gemini-*</code></p>
+          <p x-show="fieldErr('llm.model_id')" class="field-error" x-text="fieldErr('llm.model_id')"></p>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="cfg-prompt">System prompt <span class="required">*</span></label>
+          <textarea id="cfg-prompt" x-model="cfg.llm.system_prompt" @input="autoResize($event); markDirty()"
+                    x-init="$nextTick(() => autoResize({target: $el}))"
+                    placeholder="You are a data analyst. Summarise the key insights from the following data chunk..."
+                    class="input-base textarea-auto min-h-[240px]"
+                    :class="fieldErr('llm.system_prompt') ? 'input-err' : ''"></textarea>
+          <p x-show="fieldErr('llm.system_prompt')" class="field-error" x-text="fieldErr('llm.system_prompt')"></p>
+        </div>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label class="field-label" for="cfg-temp">
+              Temperature
+              <span class="field-label-value" x-text="cfg.llm.temperature"></span>
+            </label>
+            <input id="cfg-temp" type="range" min="0" max="1" step="0.05"
+                   x-model.number="cfg.llm.temperature" @input="markDirty()"
+                   class="range-input"/>
+            <div class="flex justify-between text-xs text-gray-400 mt-0.5">
+              <span>Precise</span><span>Creative</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="cfg-tokens">Max tokens <span class="required">*</span></label>
+            <input id="cfg-tokens" type="number" min="1" step="1"
+                   x-model.number="cfg.llm.max_tokens" @input="markDirty()"
+                   placeholder="1000" class="input-base"
+                   :class="fieldErr('llm.max_tokens') ? 'input-err' : ''"/>
+            <p class="field-hint">Max tokens in each LLM response</p>
+            <p x-show="fieldErr('llm.max_tokens')" class="field-error" x-text="fieldErr('llm.max_tokens')"></p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tab: Run ───────────────────────────────────────────────────── -->
+  <section x-show="activeTab === 'run'" x-transition.opacity.duration.150ms>
+    <div class="card">
+      <div class="form-section space-y-4">
+
+        <!-- File upload -->
+        <div class="field-group">
+          <label class="field-label">Data file</label>
+          <div x-show="!hasFile"
+               class="dropzone"
+               :class="{ 'dragover': isDragging }"
+               @click="$refs.fileInput.click()"
+               @keydown.enter.prevent="$refs.fileInput.click()"
+               @keydown.space.prevent="$refs.fileInput.click()"
+               @dragover.prevent="isDragging = true"
+               @dragleave="isDragging = false"
+               @drop.prevent="onDrop($event)"
+               role="button" tabindex="0">
+            <svg class="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Drop a CSV, JSONL, or .gz file here</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">or click to browse</p>
+          </div>
+          <div x-show="hasFile" class="file-attached-row">
+            <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="flex-1 text-sm font-medium text-gray-700 dark:text-gray-200 truncate" x-text="fileName"></span>
+            <span class="text-xs text-gray-400 shrink-0" x-text="fileSize"></span>
+            <button @click="clearFile()" class="text-gray-400 hover:text-red-500 transition-colors ml-1" title="Remove">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <input x-ref="fileInput" type="file" accept=".csv,.jsonl,.gz,text/csv,application/gzip" class="hidden" @change="onFileSelect($event)"/>
+        </div>
+
+        <!-- Options row -->
+        <div class="flex items-center gap-4 flex-wrap">
+          <div class="field-group">
+            <label class="field-label" for="run-name">Run name <span class="text-xs font-normal text-gray-400">(optional)</span></label>
+            <input id="run-name" x-model="runName" type="text" placeholder="e.g. test with 100 records"
+                   class="input-base w-56"/>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="run-max-records">Max records</label>
+            <input id="run-max-records" x-model="maxRecords" type="number" min="1" step="1" placeholder="All"
+                   class="input-base w-32"/>
+          </div>
+          <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none mt-4">
+            <input type="checkbox" x-model="force" class="rounded border-gray-300 dark:border-gray-600 text-blue-600 w-4 h-4"/>
+            <span>Force clear work folder</span>
+          </label>
+        </div>
+
+        <!-- Run / Stop / Clear buttons -->
+        <div class="flex items-center gap-2 pt-1">
+          <button @click="runReport()" :disabled="!canRun" class="btn-run">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/>
+            </svg>
+            Run report
+          </button>
+          <button @click="stopReport()" :disabled="!isRunning" class="btn-sm-ghost px-3 py-2" title="Stop">
+            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+            Stop
+          </button>
+          <button @click="clearAll()" :disabled="!hasClearable" class="btn-sm-ghost px-3 py-2 ml-auto" title="Clear results">
+            <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            Clear
+          </button>
+        </div>
+
+        <!-- Inline progress bar -->
+        <div x-show="isRunning || progress > 0" class="space-y-1 pt-1">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500 dark:text-gray-400 flex-1 truncate" x-text="statusText" aria-live="polite"></span>
+            <span x-show="progress > 0" class="text-xs text-gray-400 shrink-0" x-text="progress + '%'"></span>
+          </div>
+          <div class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div class="h-full rounded-full progress-fill transition-[width] duration-300" :style="'width:' + progress + '%'"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Chunk progress table -->
+    <div x-show="chunks.length > 0" x-transition class="card overflow-hidden mt-4">
+      <div class="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Progress</span>
+        <span class="text-xs text-gray-400 ml-auto" x-text="completedChunks + ' / ' + totalChunks + ' chunks'"></span>
+        <span class="text-xs text-gray-400 dark:text-gray-500">
+          <span x-text="totalTokensIn.toLocaleString()"></span> in /
+          <span x-text="totalTokensOut.toLocaleString()"></span> out
+        </span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
+              <th class="text-left py-2 px-4 font-medium">#</th>
+              <th class="text-left py-2 px-2 font-medium">Status</th>
+              <th class="text-right py-2 px-2 font-medium">Tok in</th>
+              <th class="text-right py-2 px-2 font-medium">Tok out</th>
+              <th class="text-right py-2 px-4 font-medium">Sec</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="c in chunks" :key="c.index">
+              <tr class="border-b border-gray-50 dark:border-gray-800/50 last:border-0"
+                  :class="c.status === 'running' ? 'bg-blue-50 dark:bg-blue-950/30' : ''">
+                <td class="py-1.5 px-4 font-mono text-gray-500" x-text="c.index"></td>
+                <td class="py-1.5 px-2">
+                  <span :class="chunkStatusClass(c.status)" class="inline-flex items-center gap-1">
+                    <template x-if="c.status === 'done'">
+                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    </template>
+                    <template x-if="c.status === 'running'">
+                      <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    </template>
+                    <template x-if="c.status === 'error'">
+                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                    </template>
+                    <span x-text="c.status"></span>
+                  </span>
+                </td>
+                <td class="py-1.5 px-2 text-right font-mono text-gray-500" x-text="c.tokensIn != null ? c.tokensIn.toLocaleString() : '—'"></td>
+                <td class="py-1.5 px-2 text-right font-mono text-gray-500" x-text="c.tokensOut != null ? c.tokensOut.toLocaleString() : '—'"></td>
+                <td class="py-1.5 px-4 text-right font-mono text-gray-500" x-text="c.durationSec != null ? c.durationSec : '—'"></td>
+              </tr>
+            </template>
+            <tr x-show="completedChunks > 0" class="bg-gray-50 dark:bg-gray-800/40 font-semibold">
+              <td class="py-1.5 px-4 text-gray-400 text-xs" colspan="2">Total</td>
+              <td class="py-1.5 px-2 text-right font-mono text-xs" x-text="totalTokensIn.toLocaleString()"></td>
+              <td class="py-1.5 px-2 text-right font-mono text-xs" x-text="totalTokensOut.toLocaleString()"></td>
+              <td class="py-1.5 px-4 text-right font-mono text-xs" x-text="totalElapsedSec != null ? totalElapsedSec + 's' : '—'"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ── Tab: History ───────────────────────────────────────────────── -->
+  <section x-show="activeTab === 'history'" x-transition.opacity.duration.150ms class="space-y-4">
+
+    <!-- Empty state -->
+    <div x-show="history.length === 0" class="card p-8 text-center text-gray-400 text-sm">
+      No runs yet — results will appear here after you run a report.
+    </div>
+
+    <!-- Run list -->
+    <div x-show="history.length > 0" class="card overflow-hidden">
+      <div class="flex items-center px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Runs</span>
+        <button @click="clearHistory()" class="ml-auto text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
+      </div>
+      <template x-for="(entry, i) in history" :key="i">
+        <div @click="selectHistory(i)"
+             class="px-4 py-2.5 text-xs cursor-pointer transition-colors border-b border-gray-50 dark:border-gray-800/50 last:border-0"
+             :class="selectedHistoryIdx === i ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'">
+          <!-- Row 1: id + optional name + status -->
+          <div class="flex items-center gap-2">
+            <span class="font-mono font-semibold text-gray-700 dark:text-gray-300 truncate" x-text="entry.reportId"></span>
+            <span x-show="entry.runName" class="text-gray-500 dark:text-gray-400 truncate flex-1" x-text="'— ' + entry.runName"></span>
+            <span x-show="!entry.runName" class="flex-1"></span>
+            <span :class="historyStatusClass(entry.status)" x-text="entry.status"></span>
+          </div>
+          <!-- Row 2: timestamp + stats -->
+          <div class="flex items-center gap-3 mt-1 text-gray-400 dark:text-gray-500 flex-wrap">
+            <span x-text="formatHistoryTime(entry.timestamp)"></span>
+            <template x-if="entry.summary">
+              <span class="flex items-center gap-3">
+                <span x-text="entry.summary.records != null ? entry.summary.records.toLocaleString() + ' records' : ''"></span>
+                <span x-show="entry.summary.records_limit_reached" class="chip chip-warn" style="font-size:10px;padding:1px 6px">limit</span>
+                <span x-show="entry.summary.stopped" class="chip chip-warn" style="font-size:10px;padding:1px 6px">stopped</span>
+                <span x-text="entry.summary.chunks != null ? entry.summary.chunks + ' chunk' + (entry.summary.chunks !== 1 ? 's' : '') : ''"></span>
+                <span x-text="entry.summary.duration_seconds != null ? entry.summary.duration_seconds + 's' : ''"></span>
+                <span class="font-mono" x-text="(entry.summary.input_tokens != null ? entry.summary.input_tokens.toLocaleString() : '—') + ' / ' + (entry.summary.output_tokens != null ? entry.summary.output_tokens.toLocaleString() : '—') + ' tok'"></span>
+              </span>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Selected run detail -->
+    <template x-if="selectedHistoryEntry">
+      <div class="space-y-4">
+
+        <!-- Error banner -->
+        <div x-show="selectedHistoryEntry.errorMessage" class="card">
+          <div class="error-banner">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+            </svg>
+            <span class="flex-1 text-sm" x-text="selectedHistoryEntry.errorMessage"></span>
+          </div>
+        </div>
+
+        <!-- Summary + config + paths -->
+        <div x-show="selectedHistoryEntry.summary || selectedHistoryEntry.runConfig" class="card p-4 space-y-3">
+          <template x-if="selectedHistoryEntry.runName">
+            <p class="text-sm font-semibold text-gray-700 dark:text-gray-200" x-text="selectedHistoryEntry.runName"></p>
+          </template>
+          <div class="grid grid-cols-2 gap-x-8 gap-y-0">
+            <!-- Left: run results -->
+            <table class="text-sm h-fit">
+              <thead><tr><td colspan="2" class="pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Results</td></tr></thead>
+              <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400 w-28">Records</td>
+                  <td class="py-1.5 font-medium">
+                    <span x-text="selectedHistoryEntry.summary?.records != null ? selectedHistoryEntry.summary.records.toLocaleString() : '—'"></span>
+                    <span x-show="selectedHistoryEntry.summary?.records_limit_reached" class="ml-1 chip chip-warn" style="font-size:10px;padding:1px 6px">limit</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Chunks</td>
+                  <td class="py-1.5 font-medium">
+                    <span x-text="(selectedHistoryEntry.summary?.chunks ?? '—') + (selectedHistoryEntry.summary?.chunks_skipped > 0 ? ' (' + selectedHistoryEntry.summary.chunks_skipped + ' skipped)' : '')"></span>
+                    <span x-show="selectedHistoryEntry.summary?.stopped" class="ml-1 chip chip-warn" style="font-size:10px;padding:1px 6px">stopped</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Duration</td>
+                  <td class="py-1.5 font-medium" x-text="selectedHistoryEntry.summary?.duration_seconds != null ? selectedHistoryEntry.summary.duration_seconds + 's' : '—'"></td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Tokens in</td>
+                  <td class="py-1.5 font-medium font-mono text-xs" x-text="selectedHistoryEntry.summary?.input_tokens != null ? selectedHistoryEntry.summary.input_tokens.toLocaleString() : '—'"></td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Tokens out</td>
+                  <td class="py-1.5 font-medium font-mono text-xs" x-text="selectedHistoryEntry.summary?.output_tokens != null ? selectedHistoryEntry.summary.output_tokens.toLocaleString() : '—'"></td>
+                </tr>
+              </tbody>
+            </table>
+            <!-- Right: run config -->
+            <table x-show="selectedHistoryEntry.runConfig" class="text-sm h-fit">
+              <thead><tr><td colspan="2" class="pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Configuration</td></tr></thead>
+              <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400 w-28">Model</td>
+                  <td class="py-1.5 font-medium font-mono text-xs break-all" x-text="selectedHistoryEntry.runConfig?.model_id ?? '—'"></td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Temperature</td>
+                  <td class="py-1.5 font-medium" x-text="selectedHistoryEntry.runConfig?.temperature ?? '—'"></td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Max tokens</td>
+                  <td class="py-1.5 font-medium" x-text="selectedHistoryEntry.runConfig?.max_tokens ?? '—'"></td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Chunk size</td>
+                  <td class="py-1.5 font-medium" x-text="selectedHistoryEntry.runConfig?.chunk_size ?? '—'"></td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Mode</td>
+                  <td class="py-1.5 font-medium" x-text="selectedHistoryEntry.runConfig?.incremental ? 'Incremental' : 'Parallel'">
+                  </td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Workers</td>
+                  <td class="py-1.5 font-medium" x-text="selectedHistoryEntry.runConfig?.max_workers ?? '—'"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1.5">
+            <template x-if="selectedHistoryEntry.reportLink">
+              <a :href="selectedHistoryEntry.reportLink" target="_blank" rel="noopener"
+                 class="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
+                </svg>
+                Download report
+              </a>
+            </template>
+            <template x-if="selectedHistoryEntry.s3Uri">
+              <div class="flex items-start gap-1.5 text-xs">
+                <svg class="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/>
+                </svg>
+                <code class="font-mono text-gray-500 dark:text-gray-400 break-all" x-text="selectedHistoryEntry.s3Uri"></code>
+              </div>
+            </template>
+            <template x-if="selectedHistoryEntry.outputFolder">
+              <div class="flex items-start gap-1.5 text-xs">
+                <svg class="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/>
+                </svg>
+                <code class="font-mono text-gray-500 dark:text-gray-400 break-all" x-text="selectedHistoryEntry.outputFolder"></code>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Report data table -->
+        <div x-show="reportRows.length > 0" class="card overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex-wrap gap-y-2">
+            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Report data</span>
+            <span class="chip" x-text="reportFormat?.toUpperCase()"></span>
+            <span class="text-xs text-gray-400" x-text="filteredReportRows.length.toLocaleString() + ' / ' + reportRows.length.toLocaleString() + ' rows'"></span>
+            <input x-model="reportFilter" @input="reportPage = 1" type="text" placeholder="Filter…"
+                   class="input-sm ml-auto w-44"/>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
+                  <template x-for="col in reportColumns" :key="col">
+                    <th class="text-left py-2 px-3 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap" x-text="col"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(row, ri) in pagedReportRows" :key="ri">
+                  <tr class="border-b border-gray-50 dark:border-gray-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                    <template x-for="col in reportColumns" :key="col">
+                      <td class="py-1.5 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" x-text="row[col] ?? ''" :title="row[col] ?? ''"></td>
+                    </template>
+                  </tr>
+                </template>
+                <tr x-show="filteredReportRows.length === 0">
+                  <td :colspan="reportColumns.length" class="py-6 text-center text-gray-400 text-sm">No rows match filter</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="reportPageCount > 1" class="flex items-center justify-between px-4 py-2 border-t border-gray-100 dark:border-gray-800">
+            <button @click="reportPage = Math.max(1, reportPage - 1)" :disabled="reportPage <= 1" class="btn-sm-ghost">← Prev</button>
+            <span class="text-xs text-gray-500" x-text="'Page ' + reportPage + ' of ' + reportPageCount"></span>
+            <button @click="reportPage = Math.min(reportPageCount, reportPage + 1)" :disabled="reportPage >= reportPageCount" class="btn-sm-ghost">Next →</button>
+          </div>
+        </div>
+
+        <!-- Loading indicator while fetching report data -->
+        <div x-show="selectedHistoryEntry.summary && reportRows.length === 0 && selectedHistoryEntry.status === 'completed'"
+             class="text-center text-xs text-gray-400 py-4">
+          Loading report data…
+        </div>
+
+      </div>
+    </template>
+
+  </section>
+
+</main>
+
+
+<!-- ── Toast container ────────────────────────────────────────────────── -->
+<div class="toast-container" aria-live="polite">
+  <template x-for="(t, i) in toasts" :key="t.id">
+    <div :class="toastClass(t.tone)" class="toast" x-text="t.message"></div>
+  </template>
 </div>
+
 </body>
 </html>
