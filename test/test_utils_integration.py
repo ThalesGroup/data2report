@@ -31,7 +31,6 @@ def set_aws_api_key():
     "model_id",
     [
         "inference-profile/us.anthropic.claude-sonnet-4-6",
-        "ai21.jamba-1-5-mini-v1:0",
         "amazon.nova-lite-v1:0",
         "amazon.nova-micro-v1:0",
         "inference-profile/us.anthropic.claude-3-haiku-20240307-v1:0",
