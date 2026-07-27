@@ -12,6 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Deploy or remove the data2report Lambda function.
+
+Usage (run from the repo root with PYTHONPATH=src):
+
+    OPERATION=install   python scripts/deploy_lambda.py   # create or update
+    OPERATION=uninstall python scripts/deploy_lambda.py   # delete the function
+
+Required env vars for install:
+    REPORTS_BUCKET          S3 bucket for report output
+    LAMBDA_ROLE             IAM role ARN (only needed on first create)
+    AWS_DEFAULT_REGION      AWS region
+
+Optional env vars:
+    FUNCTION_NAME           Lambda function name (default: "data2report")
+    DATA2REPORT_PREFIX      S3 key prefix (default: "data2report/")
+    UPDATE_CONFIG           "true"/"false" — update env vars and timeout (default: true)
+    UPDATE_CODE             "true"/"false" — deploy new code package (default: true)
+    GITHUB_TOKEN            GitHub PAT for downloading release assets (avoids rate limits)
+
+VERSION controls which code package is deployed:
+    "sources"               Build a zip from the local src/ tree (default)
+    "latest"                Download the latest GitHub release asset
+    "v1.2.3"                Download a specific tagged release asset
+"""
+
 import http.client
 import json
 import logging
@@ -118,7 +144,7 @@ def _get_function_name() -> str:
 
 def _get_package(pacakge_version: str) -> str:
     if pacakge_version == "sources":
-        from pack_sources import zip_sources
+        from scripts.pack_sources import zip_sources
 
         return zip_sources()
     elif pacakge_version == "latest":

@@ -29,7 +29,7 @@ jobs:
       env:
         VERSION: ${{ github.event.inputs.version || github.ref_name }}
       run: |
-        PYTHONPATH=src script_output=$(python src/pack_sources.py)
+        script_output=$(python scripts/pack_sources.py)
         zip_file=$(echo "$script_output" | sed -n '1p')
         version=$(echo "$script_output" | sed -n '2p')
         echo "zip_file=$zip_file" >> $GITHUB_ENV
