@@ -12,6 +12,7 @@
   <script defer src="static/cfg-utils.js"></script>
   <script defer src="static/report-parser.js"></script>
   <script defer src="static/data2report.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link href="static/style.css" rel="stylesheet"/>
 </head>
@@ -388,38 +389,98 @@
 
     <!-- Run list -->
     <div x-show="history.length > 0" class="card overflow-hidden">
-      <div class="flex items-center px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+      <div class="flex items-center px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 gap-2 flex-wrap">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Runs</span>
+        <span x-show="compareAvailable" class="text-xs text-gray-400 dark:text-gray-500">Select 2 to compare</span>
+        <!-- Compare toolbar -->
+        <div x-show="compareAvailable && compareSelected.length > 0" class="flex items-center gap-2 ml-2">
+          <span class="text-xs font-medium text-blue-600 dark:text-blue-400"
+                x-text="compareSelected.length + '/2 selected'"></span>
+          <button @click="compareRuns()"
+                  :disabled="compareSelected.length !== 2 || compareLoading || !!compareMismatch"
+                  :title="compareMismatch ?? ''"
+                  class="btn-sm-ghost px-2 py-1 text-xs disabled:opacity-40">
+            <span x-show="!compareLoading">Compare with LLM</span>
+            <span x-show="compareLoading">Comparing…</span>
+          </button>
+          <span x-show="compareMismatch" class="text-xs text-amber-500" x-text="compareMismatch"></span>
+          <button @click="compareSelected = []; compareResult = null; compareError = null"
+                  class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+        </div>
         <button @click="clearHistory()" class="ml-auto text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
       </div>
       <template x-for="(entry, i) in history" :key="i">
-        <div @click="selectHistory(i)"
-             class="px-4 py-2.5 text-xs cursor-pointer transition-colors border-b border-gray-50 dark:border-gray-800/50 last:border-0"
+        <div class="px-4 py-2.5 text-xs transition-colors border-b border-gray-50 dark:border-gray-800/50 last:border-0 flex items-start gap-2"
              :class="selectedHistoryIdx === i ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'">
-          <!-- Row 1: id + optional name + status -->
-          <div class="flex items-center gap-2">
-            <span class="font-mono font-semibold text-gray-700 dark:text-gray-300 truncate" x-text="entry.reportId"></span>
-            <span x-show="entry.runName" class="text-gray-500 dark:text-gray-400 truncate flex-1" x-text="'— ' + entry.runName"></span>
-            <span x-show="!entry.runName" class="flex-1"></span>
-            <span :class="historyStatusClass(entry.status)" x-text="entry.status"></span>
-          </div>
-          <!-- Row 2: timestamp + stats -->
-          <div class="flex items-center gap-3 mt-1 text-gray-400 dark:text-gray-500 flex-wrap">
-            <span x-text="formatHistoryTime(entry.timestamp)"></span>
-            <template x-if="entry.summary">
-              <span class="flex items-center gap-3">
-                <span x-text="entry.summary.records != null ? entry.summary.records.toLocaleString() + ' records' : ''"></span>
-                <span x-show="entry.summary.records_limit_reached" class="chip chip-warn" style="font-size:10px;padding:1px 6px">limit</span>
-                <span x-show="entry.summary.stopped" class="chip chip-warn" style="font-size:10px;padding:1px 6px">stopped</span>
-                <span x-text="entry.summary.chunks != null ? entry.summary.chunks + ' chunk' + (entry.summary.chunks !== 1 ? 's' : '') : ''"></span>
-                <span x-text="entry.summary.duration_seconds != null ? entry.summary.duration_seconds + 's' : ''"></span>
-                <span class="font-mono" x-text="(entry.summary.input_tokens != null ? entry.summary.input_tokens.toLocaleString() : '—') + ' / ' + (entry.summary.output_tokens != null ? entry.summary.output_tokens.toLocaleString() : '—') + ' tok'"></span>
-              </span>
-            </template>
+          <!-- Compare checkbox -->
+          <input x-show="compareAvailable" type="checkbox"
+                 :checked="compareSelected.includes(i)"
+                 @click.stop="toggleCompareSelect(i)"
+                 class="mt-0.5 shrink-0 rounded border-gray-300 dark:border-gray-600 text-blue-600 w-3.5 h-3.5 cursor-pointer"/>
+          <!-- Row content -->
+          <div class="flex-1 min-w-0 cursor-pointer" @click="selectHistory(i)">
+            <!-- Row 1: id + optional name + status -->
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-semibold text-gray-700 dark:text-gray-300 truncate" x-text="entry.reportId"></span>
+              <span x-show="entry.runName" class="text-gray-500 dark:text-gray-400 truncate flex-1" x-text="'— ' + entry.runName"></span>
+              <span x-show="!entry.runName" class="flex-1"></span>
+              <span :class="historyStatusClass(entry.status)" x-text="entry.status"></span>
+            </div>
+            <!-- Row 2: timestamp + stats -->
+            <div class="flex items-center gap-3 mt-1 text-gray-400 dark:text-gray-500 flex-wrap">
+              <span x-text="formatHistoryTime(entry.timestamp)"></span>
+              <template x-if="entry.summary">
+                <span class="flex items-center gap-3">
+                  <span x-text="entry.summary.records != null ? entry.summary.records.toLocaleString() + ' records' : ''"></span>
+                  <span x-show="entry.summary.records_limit_reached" class="chip chip-warn" style="font-size:10px;padding:1px 6px">limit</span>
+                  <span x-show="entry.summary.stopped" class="chip chip-warn" style="font-size:10px;padding:1px 6px">stopped</span>
+                  <span x-text="entry.summary.chunks != null ? entry.summary.chunks + ' chunk' + (entry.summary.chunks !== 1 ? 's' : '') : ''"></span>
+                  <span x-text="entry.summary.duration_seconds != null ? entry.summary.duration_seconds + 's' : ''"></span>
+                  <span class="font-mono" x-text="(entry.summary.input_tokens != null ? entry.summary.input_tokens.toLocaleString() : '—') + ' / ' + (entry.summary.output_tokens != null ? entry.summary.output_tokens.toLocaleString() : '—') + ' tok'"></span>
+                </span>
+              </template>
+            </div>
           </div>
         </div>
       </template>
     </div>
+
+    <!-- Compare result panel -->
+    <template x-if="compareAvailable && compareError">
+      <div class="card p-4">
+        <div class="error-banner">
+          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+          </svg>
+          <span class="text-sm" x-text="compareError"></span>
+        </div>
+      </div>
+    </template>
+    <template x-if="compareAvailable && compareResult">
+      <div class="card p-4 space-y-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="space-y-1">
+            <p class="text-sm font-semibold text-gray-700 dark:text-gray-200">Comparison</p>
+            <p class="text-xs text-gray-400">
+              <span class="font-medium text-gray-500 dark:text-gray-400">A:</span>
+              <span x-text="compareResult.labelA"></span>
+            </p>
+            <p class="text-xs text-gray-400">
+              <span class="font-medium text-gray-500 dark:text-gray-400">B:</span>
+              <span x-text="compareResult.labelB"></span>
+            </p>
+          </div>
+          <div x-show="compareResult.usage" class="text-xs text-gray-400 text-right shrink-0 font-mono">
+            <span x-text="(compareResult.usage?.input_tokens ?? '—').toLocaleString()"></span>
+            /
+            <span x-text="(compareResult.usage?.output_tokens ?? '—').toLocaleString()"></span>
+            tok
+          </div>
+        </div>
+        <div class="compare-md bg-gray-50 dark:bg-gray-800/60 rounded-lg p-4 text-sm"
+             x-html="marked.parse(compareResult.text)"></div>
+      </div>
+    </template>
 
     <!-- Selected run detail -->
     <template x-if="selectedHistoryEntry">

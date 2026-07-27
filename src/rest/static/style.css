@@ -437,3 +437,24 @@
 .seg-inactive:hover { background: #f3f4f6; color: #374151; }
 .dark .seg-inactive { color: #6b7280; }
 .dark .seg-inactive:hover { background: #374151; color: #d1d5db; }
+
+/* ── Compare markdown output ─────────────────────────────────────────────── */
+.compare-md { line-height: 1.65; color: #374151; }
+.dark .compare-md { color: #d1d5db; }
+.compare-md h1, .compare-md h2, .compare-md h3 {
+  font-weight: 700; margin: 1em 0 0.4em;
+}
+.compare-md h1 { font-size: 1.1em; }
+.compare-md h2 { font-size: 1em; color: #1d4ed8; }
+.dark .compare-md h2 { color: #60a5fa; }
+.compare-md h3 { font-size: 0.9em; color: #374151; }
+.dark .compare-md h3 { color: #9ca3af; }
+.compare-md p { margin: 0.4em 0; }
+.compare-md ul, .compare-md ol { margin: 0.4em 0 0.4em 1.25em; }
+.compare-md li { margin: 0.2em 0; }
+.compare-md strong { font-weight: 700; }
+.compare-md code {
+  font-family: monospace; font-size: 0.85em;
+  background: #e5e7eb; border-radius: 3px; padding: 1px 4px;
+}
+.dark .compare-md code { background: #374151; }

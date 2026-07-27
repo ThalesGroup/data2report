@@ -59,6 +59,13 @@ window.appData = function () {
     // History
     history: [],
 
+    // Compare
+    compareAvailable: false,
+    compareSelected: [],   // up to 2 history indices
+    compareLoading: false,
+    compareResult: null,   // { text, usage, labelA, labelB } | null
+    compareError: null,
+
     // Tools
     availableTools: [],
 
@@ -156,6 +163,16 @@ window.appData = function () {
       return this.history[this.selectedHistoryIdx] ?? null;
     },
 
+    get compareMismatch() {
+      if (this.compareSelected.length !== 2) return null;
+      const [ia, ib] = this.compareSelected;
+      const a = this.history[ia], b = this.history[ib];
+      if (!a || !b) return null;
+      if (a.reportId !== b.reportId) return `Different report IDs (${a.reportId} vs ${b.reportId})`;
+      if (a.fileName && b.fileName && a.fileName !== b.fileName) return `Different files (${a.fileName} vs ${b.fileName})`;
+      return null;
+    },
+
     // ── Lifecycle ───────────────────────────────────────────────────────
 
     init() {
@@ -167,6 +184,7 @@ window.appData = function () {
       }
       this.refreshSavedReports();
       this.fetchAvailableTools();
+      this.fetchCompareAvailable();
       this.pristineCfg = JSON.stringify(cfgToJson(this.cfg));
       window.addEventListener('beforeunload', (e) => {
         if (this.isDirty) { e.preventDefault(); e.returnValue = ''; }
@@ -403,6 +421,7 @@ window.appData = function () {
         this.addToHistory({
           reportId: payload.id, runId, runName: this.runName.trim() || null, timestamp: new Date().toISOString(),
           status: res.ok ? 'completed' : 'failed',
+          fileName: this.fileName || null,
           runConfig: {
             model_id:    payload.llm.model_id,
             temperature: payload.llm.temperature,
@@ -480,6 +499,7 @@ window.appData = function () {
         this.addToHistory({
           reportId: this.currentRun.reportId, runId: this.currentRun.runId,
           timestamp: new Date().toISOString(), runName: this.runName.trim() || null, status: 'stopped',
+          fileName: this.fileName || null,
           runConfig: { model_id: this.cfg.llm.model_id, temperature: this.cfg.llm.temperature, max_tokens: this.cfg.llm.max_tokens, chunk_size: this.cfg.report.chunk_size, incremental: this.cfg.report.incremental, max_workers: this.cfg.report.max_workers, tools: this.cfg.llm.tools ?? [] },
           summary: null, reportLink: null, s3Uri: null, outputFolder: null, errorMessage: null,
           totalTokensIn: this.totalTokensIn, totalTokensOut: this.totalTokensOut, durationMs: null,
@@ -525,6 +545,7 @@ window.appData = function () {
 
     selectHistory(i) {
       this.selectedHistoryIdx = i;
+      this.compareResult = null; this.compareError = null;
       const entry = this.history[i];
       if (entry?.reportId && entry?.runId) {
         this.fetchReportContent(entry.reportId, entry.runId);
@@ -536,7 +557,61 @@ window.appData = function () {
 
     clearHistory() {
       this.history = []; this.selectedHistoryIdx = null;
+      this.compareSelected = []; this.compareResult = null; this.compareError = null;
       localStorage.removeItem(HISTORY_KEY);
+    },
+
+    toggleCompareSelect(i) {
+      const pos = this.compareSelected.indexOf(i);
+      if (pos !== -1) {
+        this.compareSelected = this.compareSelected.filter(x => x !== i);
+      } else if (this.compareSelected.length < 2) {
+        this.compareSelected = [...this.compareSelected, i];
+      } else {
+        // replace the older selection with the new one
+        this.compareSelected = [this.compareSelected[1], i];
+      }
+      this.compareResult = null;
+      this.compareError = null;
+    },
+
+    async compareRuns() {
+      if (this.compareSelected.length !== 2) return;
+      const [ia, ib] = this.compareSelected;
+      const ea = this.history[ia];
+      const eb = this.history[ib];
+      if (!ea?.reportId || !ea?.runId || !eb?.reportId || !eb?.runId) {
+        this.compareError = 'Selected runs are missing report/run IDs.';
+        return;
+      }
+      this.compareLoading = true;
+      this.compareResult = null;
+      this.compareError = null;
+      try {
+        const res = await fetch('/api/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            run_a: { report_id: ea.reportId, run_id: ea.runId, config: ea.runConfig ?? {} },
+            run_b: { report_id: eb.reportId, run_id: eb.runId, config: eb.runConfig ?? {} },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.compareError = data.error || 'Compare failed';
+        } else {
+          this.compareResult = {
+            text: data.comparison,
+            usage: data.usage,
+            labelA: `${ea.reportId} / ${ea.runId}${ea.runName ? ' — ' + ea.runName : ''}`,
+            labelB: `${eb.reportId} / ${eb.runId}${eb.runName ? ' — ' + eb.runName : ''}`,
+          };
+        }
+      } catch (e) {
+        this.compareError = 'Network error: ' + (e?.message || String(e));
+      } finally {
+        this.compareLoading = false;
+      }
     },
 
     persistHistory() {
@@ -554,6 +629,13 @@ window.appData = function () {
     },
 
     // ── Tools ───────────────────────────────────────────────────────────
+
+    async fetchCompareAvailable() {
+      try {
+        const res = await fetch('/api/compare/available');
+        if (res.ok) this.compareAvailable = (await res.json()).available;
+      } catch { /* non-fatal */ }
+    },
 
     async fetchAvailableTools() {
       try {

@@ -39,6 +39,7 @@ from conf_utils import (
 )
 from tools.registry import list_tools as list_tool_registry
 from data2report import run_report
+from llm_utils import invoke_llm
 from s3_utils import get_reports_bucket, get_data2report_prefix
 from utils import (
     get_reports_folder,
@@ -214,6 +215,89 @@ def stop_run():
 @app.get("/api/tools")
 def _get_tools():
     return jsonify(list_tool_registry())
+
+
+_COMPARE_MAX_TOKENS = 4096
+_COMPARE_TEMPERATURE = 0.3
+_COMPARE_SYSTEM_PROMPT = (
+    "You are a data analyst reviewing two runs of the same LLM reporting pipeline on the same data. "
+    "Be brief and direct. Structure your response with exactly three short sections:\n"
+    "1. **Config changes** — list only the configuration parameters that differ between the two runs.\n"
+    "2. **Result changes** — what changed in the output (new findings, dropped findings, different values or trends). Skip anything that stayed the same.\n"
+    "3. **Recommendation** — which run produced the better result and why, in 1–2 sentences."
+)
+
+
+def _read_report_content(report_id: str, run_id: str) -> str:
+    report_file = os.path.join(
+        get_report_folder(report_id, run_id), get_final_report_name()
+    )
+    if not os.path.exists(report_file):
+        raise FileNotFoundError(f"Report file not found: {report_file}")
+    with gzip.open(report_file, "rt") as f:
+        return f.read()
+
+
+@app.get("/api/compare/available")
+def compare_available():
+    return jsonify({"available": bool(os.environ.get("COMPARE_MODEL_ID"))})
+
+
+@app.post("/api/compare")
+def compare_reports():
+    data = request.get_json(silent=True) or {}
+    run_a = data.get("run_a") or {}
+    run_b = data.get("run_b") or {}
+    report_id_a, run_id_a = run_a.get("report_id"), run_a.get("run_id")
+    report_id_b, run_id_b = run_b.get("report_id"), run_b.get("run_id")
+    if not all([report_id_a, run_id_a, report_id_b, run_id_b]):
+        return (
+            jsonify({"error": "run_a and run_b must each have report_id and run_id"}),
+            400,
+        )
+    try:
+        content_a = _read_report_content(report_id_a, run_id_a)
+        content_b = _read_report_content(report_id_b, run_id_b)
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+
+    config_a = run_a.get("config") or {}
+    config_b = run_b.get("config") or {}
+
+    def _fmt_config(cfg: dict) -> str:
+        lines = [
+            f"- model: {cfg.get('model_id', '—')}",
+            f"- temperature: {cfg.get('temperature', '—')}",
+            f"- max_tokens: {cfg.get('max_tokens', '—')}",
+            f"- chunk_size: {cfg.get('chunk_size', '—')}",
+            f"- mode: {'incremental' if cfg.get('incremental') else 'parallel'}",
+            f"- workers: {cfg.get('max_workers', '—')}",
+            f"- tools: {', '.join(cfg['tools']) if cfg.get('tools') else 'none'}",
+        ]
+        return "\n".join(lines)
+
+    label_a = f"{report_id_a} / {run_id_a}"
+    label_b = f"{report_id_b} / {run_id_b}"
+    user_prompt = (
+        f"## Run A — {label_a}\n\n### Config\n{_fmt_config(config_a)}\n\n### Output\n{content_a}\n\n"
+        f"## Run B — {label_b}\n\n### Config\n{_fmt_config(config_b)}\n\n### Output\n{content_b}"
+    )
+    model_id = os.environ.get("COMPARE_MODEL_ID")
+    if not model_id:
+        return jsonify({"error": "COMPARE_MODEL_ID is not configured"}), 503
+    try:
+        result = invoke_llm(
+            system_prompt=_COMPARE_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            model_id=model_id,
+            max_tokens=_COMPARE_MAX_TOKENS,
+            temperature=_COMPARE_TEMPERATURE,
+            session=Session(),
+        )
+    except Exception as e:
+        logging.exception("Error during compare LLM call")
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"comparison": result["content"], "usage": result["usage"]})
 
 
 @app.get("/example-config")
