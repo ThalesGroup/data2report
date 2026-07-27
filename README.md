@@ -65,5 +65,13 @@ While the system does not directly connect to databases, it is designed to work 
 ### Deployment
 Deployment is flexible, with multiple options to suit different environments. The system can run as a Docker container, providing reproducibility and consistency whether on a local machine, on-premises infrastructure, or in the cloud. For lightweight, event-driven use cases, AWS Lambda offers a serverless deployment option that minimizes infrastructure management. Both output reports and intermediate data can be stored locally or in object stores, depending on operational needs.
 
+#### AWS Lambda Deployment
+
+data2report can run as a serverless Lambda function triggered by S3 `ObjectCreated` events. Set the following environment variables:
+
+- **`PREFIX_TO_REPORT`** — Comma-separated list of `prefix:report_id` pairs. When a file is uploaded, the Lambda matches its S3 key against the prefixes to determine which report to run. Example: `data/sales/:sales_report,data/logs/:security_report`.
+- **`RUN_PARTITION`** *(default: `run`)* — Partition name used in the output path (`reports/report={id}/run={run_id}/`) and to auto-extract the `run_id` from the input S3 key (e.g., a key containing `run=2024-01-15` sets `run_id` to `2024-01-15`).
+
+
 ## License ⚖️
 This package is distributed under the Apache 2.0 license. All dependencies have their own license

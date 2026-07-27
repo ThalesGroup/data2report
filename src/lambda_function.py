@@ -74,6 +74,14 @@ def handle_event(event) -> Dict[str, Any]:
         return {"error": f"Unknown operation: {operation}"}
 
 
+def _parse_prefix_to_report(value: str) -> dict:
+    result = {}
+    for entry in value.split(","):
+        prefix, report_id = entry.split(":", 1)
+        result[prefix.strip()] = report_id.strip()
+    return result
+
+
 def _run_report(event):
     if _is_s3_object_created_event(event):
         report_id = None
@@ -82,7 +90,7 @@ def _run_report(event):
             return {
                 "error": f"{_PREFIX_TO_REPORT_ENV_VAR} environment variable not set"
             }
-        prefix_to_report = json.loads(os.environ[_PREFIX_TO_REPORT_ENV_VAR])
+        prefix_to_report = _parse_prefix_to_report(os.environ[_PREFIX_TO_REPORT_ENV_VAR])
         s3_record = event["Records"][0]
         s3_key = urllib.parse.unquote_plus(s3_record["s3"]["object"]["key"])
         for prefix in prefix_to_report:

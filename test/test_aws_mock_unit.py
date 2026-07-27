@@ -27,7 +27,7 @@ from moto import mock_aws
 from conf_utils import save_report, delete_report
 from conftest import get_config, mock_llm
 from data2report import run_report
-from lambda_function import handle_event
+from lambda_function import handle_event, _parse_prefix_to_report
 from s3_utils import (
     object_exists,
     get_reports_bucket,
@@ -159,3 +159,43 @@ def test_lambda_operations(
     assert clear_folder(get_reports_bucket(), "tmp/", session) == 1
     assert clear_folder(get_reports_bucket(), "data2report/reports/", session) == 1
     s3_client.delete_bucket(Bucket=get_reports_bucket())
+
+
+class TestParsePrefixToReport:
+    def test_single_entry(self):
+        result = _parse_prefix_to_report("data/sales/:sales_report")
+        assert result == {"data/sales/": "sales_report"}
+
+    def test_multiple_entries(self):
+        result = _parse_prefix_to_report("data/sales/:sales_report,data/logs/:security_report")
+        assert result == {"data/sales/": "sales_report", "data/logs/": "security_report"}
+
+    def test_strips_whitespace(self):
+        result = _parse_prefix_to_report("data/sales/ : sales_report , data/logs/ : security_report")
+        assert result == {"data/sales/": "sales_report", "data/logs/": "security_report"}
+
+    def test_missing_prefix_to_report_env_var(self, monkeypatch):
+        monkeypatch.delenv("PREFIX_TO_REPORT", raising=False)
+        s3_event = {
+            "Records": [{
+                "eventSource": "aws:s3",
+                "eventName": "ObjectCreated:Put",
+                "s3": {"bucket": {"name": "my-bucket"}, "object": {"key": "data/sales/file.csv"}},
+            }]
+        }
+        result = handle_event(s3_event)
+        assert "error" in result
+        assert "PREFIX_TO_REPORT" in result["error"]
+
+    def test_no_matching_prefix(self, monkeypatch):
+        monkeypatch.setenv("PREFIX_TO_REPORT", "data/sales/:sales_report")
+        s3_event = {
+            "Records": [{
+                "eventSource": "aws:s3",
+                "eventName": "ObjectCreated:Put",
+                "s3": {"bucket": {"name": "my-bucket"}, "object": {"key": "data/logs/file.csv"}},
+            }]
+        }
+        result = handle_event(s3_event)
+        assert "error" in result
+        assert "No matching prefix" in result["error"]
