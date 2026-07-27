@@ -316,72 +316,24 @@
         <!-- Inline progress bar -->
         <div x-show="isRunning || progress > 0" class="space-y-1 pt-1">
           <div class="flex items-center gap-2">
-            <span class="text-xs text-gray-500 dark:text-gray-400 flex-1 truncate" x-text="statusText" aria-live="polite"></span>
-            <span x-show="progress > 0" class="text-xs text-gray-400 shrink-0" x-text="progress + '%'"></span>
+<span class="text-xs text-gray-500 dark:text-gray-400 flex-1 truncate" x-text="statusText" aria-live="polite"></span>
+            <span x-show="isRunning" class="text-xs text-gray-400 shrink-0 font-mono" x-text="Math.floor(elapsedSec/60).toString().padStart(2,'0') + ':' + (elapsedSec%60).toString().padStart(2,'0')"></span>
+            <span x-show="progress > 0 && progress < 100 && !isRunning" class="text-xs text-gray-400 shrink-0" x-text="progress + '%'"></span>
           </div>
-          <div class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div class="h-full rounded-full progress-fill transition-[width] duration-300" :style="'width:' + progress + '%'"></div>
+          <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full progress-track" :class="isRunning ? 'running' : ''">
+            <div class="h-full rounded-full progress-fill transition-[width] duration-300"
+                 :style="'width:' + progress + '%'"></div>
+          </div>
+          <div x-show="completedChunks > 0" class="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+            <span x-text="completedChunks + ' / ' + totalChunks + ' chunks done'"></span>
+            <span x-show="totalTokensIn > 0" x-text="totalTokensIn.toLocaleString() + ' / ' + totalTokensOut.toLocaleString() + ' tok'"></span>
+            <span x-show="totalElapsedSec != null" x-text="totalElapsedSec + 's'"></span>
           </div>
         </div>
 
       </div>
     </div>
 
-    <!-- Chunk progress table -->
-    <div x-show="chunks.length > 0" x-transition class="card overflow-hidden mt-4">
-      <div class="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Progress</span>
-        <span class="text-xs text-gray-400 ml-auto" x-text="completedChunks + ' / ' + totalChunks + ' chunks'"></span>
-        <span class="text-xs text-gray-400 dark:text-gray-500">
-          <span x-text="totalTokensIn.toLocaleString()"></span> in /
-          <span x-text="totalTokensOut.toLocaleString()"></span> out
-        </span>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-xs">
-          <thead>
-            <tr class="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
-              <th class="text-left py-2 px-4 font-medium">#</th>
-              <th class="text-left py-2 px-2 font-medium">Status</th>
-              <th class="text-right py-2 px-2 font-medium">Tok in</th>
-              <th class="text-right py-2 px-2 font-medium">Tok out</th>
-              <th class="text-right py-2 px-4 font-medium">Sec</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="c in chunks" :key="c.index">
-              <tr class="border-b border-gray-50 dark:border-gray-800/50 last:border-0"
-                  :class="c.status === 'running' ? 'bg-blue-50 dark:bg-blue-950/30' : ''">
-                <td class="py-1.5 px-4 font-mono text-gray-500" x-text="c.index"></td>
-                <td class="py-1.5 px-2">
-                  <span :class="chunkStatusClass(c.status)" class="inline-flex items-center gap-1">
-                    <template x-if="c.status === 'done'">
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    </template>
-                    <template x-if="c.status === 'running'">
-                      <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    </template>
-                    <template x-if="c.status === 'error'">
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-                    </template>
-                    <span x-text="c.status"></span>
-                  </span>
-                </td>
-                <td class="py-1.5 px-2 text-right font-mono text-gray-500" x-text="c.tokensIn != null ? c.tokensIn.toLocaleString() : '—'"></td>
-                <td class="py-1.5 px-2 text-right font-mono text-gray-500" x-text="c.tokensOut != null ? c.tokensOut.toLocaleString() : '—'"></td>
-                <td class="py-1.5 px-4 text-right font-mono text-gray-500" x-text="c.durationSec != null ? c.durationSec : '—'"></td>
-              </tr>
-            </template>
-            <tr x-show="completedChunks > 0" class="bg-gray-50 dark:bg-gray-800/40 font-semibold">
-              <td class="py-1.5 px-4 text-gray-400 text-xs" colspan="2">Total</td>
-              <td class="py-1.5 px-2 text-right font-mono text-xs" x-text="totalTokensIn.toLocaleString()"></td>
-              <td class="py-1.5 px-2 text-right font-mono text-xs" x-text="totalTokensOut.toLocaleString()"></td>
-              <td class="py-1.5 px-4 text-right font-mono text-xs" x-text="totalElapsedSec != null ? totalElapsedSec + 's' : '—'"></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
 
   </section>
 
@@ -547,15 +499,41 @@
             <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Report data</span>
             <span class="chip" x-text="reportFormat?.toUpperCase()"></span>
             <span class="text-xs text-gray-400" x-text="filteredReportRows.length.toLocaleString() + ' / ' + reportRows.length.toLocaleString() + ' rows'"></span>
-            <input x-model="reportFilter" @input="reportPage = 1" type="text" placeholder="Filter…"
-                   class="input-sm ml-auto w-44"/>
+            <input x-model="reportFilter" @input="reportPage = 1" type="text" placeholder="Filter all columns…"
+                   class="input-sm ml-auto w-48"/>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-xs">
+            <table class="text-xs" style="table-layout:fixed; min-width:100%">
+              <colgroup>
+                <template x-for="col in reportColumns" :key="'cg-'+col">
+                  <col :style="reportColWidths[col] ? 'width:'+reportColWidths[col]+'px' : 'min-width:80px'">
+                </template>
+              </colgroup>
               <thead>
+                <!-- Sort row -->
                 <tr class="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60">
-                  <template x-for="col in reportColumns" :key="col">
-                    <th class="text-left py-2 px-3 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap" x-text="col"></th>
+                  <template x-for="col in reportColumns" :key="'th-'+col">
+                    <th class="relative text-left py-2 pl-3 pr-1 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap select-none"
+                        :style="reportColWidths[col] ? 'width:'+reportColWidths[col]+'px' : ''">
+                      <div class="flex items-center gap-1 cursor-pointer group" @click="sortBy(col)">
+                        <span class="truncate" x-text="col"></span>
+                        <span class="text-gray-300 dark:text-gray-600 group-hover:text-gray-400"
+                              x-text="reportSort.col===col ? (reportSort.dir===1 ? '↑' : '↓') : '↕'"></span>
+                      </div>
+                      <!-- Resize handle -->
+                      <div class="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400/40 active:bg-blue-500/60"
+                           @mousedown.stop="startResize(col, $event)"></div>
+                    </th>
+                  </template>
+                </tr>
+                <!-- Per-column filter row -->
+                <tr class="border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+                  <template x-for="col in reportColumns" :key="'fi-'+col">
+                    <th class="py-1 px-1.5">
+                      <input x-model="reportColFilters[col]" @input="reportPage = 1" type="text"
+                             :placeholder="'Filter ' + col + '…'"
+                             class="w-full input-sm text-xs py-0.5"/>
+                    </th>
                   </template>
                 </tr>
               </thead>
@@ -563,7 +541,7 @@
                 <template x-for="(row, ri) in pagedReportRows" :key="ri">
                   <tr class="border-b border-gray-50 dark:border-gray-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/40">
                     <template x-for="col in reportColumns" :key="col">
-                      <td class="py-1.5 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" x-text="row[col] ?? ''" :title="row[col] ?? ''"></td>
+                      <td class="py-1.5 px-3 text-gray-700 dark:text-gray-300 truncate" x-text="row[col] ?? ''" :title="row[col] ?? ''"></td>
                     </template>
                   </tr>
                 </template>

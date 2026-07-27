@@ -35,6 +35,9 @@ PYTHONPATH=src:test python -m pytest test/*_integration.py
 ```
 Starts Flask on port 5001 (port 5000 is reserved by macOS AirPlay Receiver) and tees logs to `logs/`. Override the port with `APP_PORT=5002 ./start_server.sh`.
 
+### Restart the server
+When asked to restart the server, just run `./start_server.sh` in the background — the script already kills any existing instance. No separate `pkill` needed beforehand.
+
 ### Docker
 ```bash
 docker build -t data2report:latest .

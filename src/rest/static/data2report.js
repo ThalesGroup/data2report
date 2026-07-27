@@ -51,6 +51,10 @@ window.appData = function () {
     reportFilter: '',
     reportPage: 1,
     reportPageSize: 25,
+    reportColFilters: {},   // { colName: filterString }
+    reportSort: { col: null, dir: 1 }, // dir: 1=asc, -1=desc
+    reportColWidths: {},    // { colName: widthPx }
+    _resizeState: null,     // { col, startX, startW }
 
     // History
     history: [],
@@ -60,6 +64,9 @@ window.appData = function () {
 
     _es: null,
     _vTimer: null,
+    _crawlTimer: null,
+    _elapsedTimer: null,
+    elapsedSec: 0,
 
     // ── Computed ────────────────────────────────────────────────────────
 
@@ -71,11 +78,29 @@ window.appData = function () {
     },
 
     get filteredReportRows() {
-      if (!this.reportFilter.trim()) return this.reportRows;
-      const q = this.reportFilter.toLowerCase();
-      return this.reportRows.filter(row =>
-        Object.values(row).some(v => String(v).toLowerCase().includes(q))
-      );
+      let rows = this.reportRows;
+      // Global filter
+      if (this.reportFilter.trim()) {
+        const q = this.reportFilter.toLowerCase();
+        rows = rows.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(q)));
+      }
+      // Per-column filters
+      for (const [col, val] of Object.entries(this.reportColFilters)) {
+        if (!val.trim()) continue;
+        const q = val.toLowerCase();
+        rows = rows.filter(row => String(row[col] ?? '').toLowerCase().includes(q));
+      }
+      // Sort
+      if (this.reportSort.col !== null) {
+        const { col, dir } = this.reportSort;
+        rows = [...rows].sort((a, b) => {
+          const av = a[col] ?? '', bv = b[col] ?? '';
+          const an = Number(av), bn = Number(bv);
+          const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : String(av).localeCompare(String(bv));
+          return cmp * dir;
+        });
+      }
+      return rows;
     },
 
     get reportPageCount() {
@@ -85,6 +110,33 @@ window.appData = function () {
     get pagedReportRows() {
       const start = (this.reportPage - 1) * this.reportPageSize;
       return this.filteredReportRows.slice(start, start + this.reportPageSize);
+    },
+
+    sortBy(col) {
+      if (this.reportSort.col === col) {
+        this.reportSort = { col, dir: this.reportSort.dir * -1 };
+      } else {
+        this.reportSort = { col, dir: 1 };
+      }
+      this.reportPage = 1;
+    },
+
+    startResize(col, e) {
+      e.preventDefault();
+      const th = e.target.closest('th');
+      this._resizeState = { col, startX: e.clientX, startW: th.offsetWidth };
+      const onMove = (ev) => {
+        if (!this._resizeState) return;
+        const delta = ev.clientX - this._resizeState.startX;
+        this.reportColWidths = { ...this.reportColWidths, [col]: Math.max(40, this._resizeState.startW + delta) };
+      };
+      const onUp = () => {
+        this._resizeState = null;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
     },
 
     get completedChunks() {
@@ -270,8 +322,18 @@ window.appData = function () {
 
     _resetRunState() {
       this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
-      this.reportFilter = ''; this.reportPage = 1;
+      this.reportFilter = ''; this.reportPage = 1; this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
       this.chunks = []; this.totalTokensIn = 0; this.totalTokensOut = 0; this.totalElapsedSec = null;
+      if (this._crawlTimer) { clearInterval(this._crawlTimer); this._crawlTimer = null; }
+    },
+
+    _startCrawl() {
+      // Slowly advance the bar toward 30% while waiting for the first real event
+      if (this._crawlTimer) { clearInterval(this._crawlTimer); }
+      this._crawlTimer = setInterval(() => {
+        if (!this.isRunning || this.chunks.length > 0) { clearInterval(this._crawlTimer); this._crawlTimer = null; return; }
+        if (this.progress < 30) this.progress = Math.min(30, this.progress + 1);
+      }, 600);
     },
 
     async runReport() {
@@ -288,6 +350,9 @@ window.appData = function () {
       this.progress = 5; this.statusText = 'Uploading...'; this.hasClearable = true;
 
       this.subscribeProgress(payload.id, runId);
+      this._startCrawl();
+      this.elapsedSec = 0;
+      this._elapsedTimer = setInterval(() => { this.elapsedSec++; }, 1000);
 
       const fd = new FormData();
       fd.set('config', JSON.stringify(payload));
@@ -358,6 +423,8 @@ window.appData = function () {
         });
       } finally {
         this.isRunning = false;
+        if (this._crawlTimer) { clearInterval(this._crawlTimer); this._crawlTimer = null; }
+        if (this._elapsedTimer) { clearInterval(this._elapsedTimer); this._elapsedTimer = null; }
         setTimeout(() => { this.progress = 0; }, 800);
         setTimeout(() => { if (this._es) { this._es.close(); this._es = null; } }, 30000);
       }
@@ -366,7 +433,7 @@ window.appData = function () {
     subscribeProgress(reportId, runId) {
       if (this._es) { try { this._es.close(); } catch {} }
       this._es = new EventSource(`/progress/stream?report_id=${encodeURIComponent(reportId)}&run_id=${encodeURIComponent(runId)}`);
-      this._es.addEventListener('hello', () => { this.statusText = `Connected — ${reportId}`; });
+      this._es.addEventListener('hello', () => { this.statusText = 'Splitting data…'; if (this.progress < 10) this.progress = 10; });
       this._es.addEventListener('progress', (e) => {
         const evt   = JSON.parse(e.data);
         const idx   = evt.chunk_index ?? evt.completed_chunks ?? 1;
@@ -384,8 +451,9 @@ window.appData = function () {
           this.chunks.forEach(c => { if (c.status === 'running') c.status = 'done'; });
           this.chunks.push({ index: idx, total, status: 'done', tokensIn: tokIn, tokensOut: tokOut, durationSec: dur });
         }
-        this.progress    = Math.max(5, Math.min(99, Math.floor((idx / total) * 100)));
-        this.statusText  = `Chunk ${idx} / ${total}`;
+        this.progress    = Math.max(10, Math.min(99, Math.floor((idx / total) * 100)));
+        const tokStr = this.totalTokensIn > 0 ? ` · ${this.totalTokensIn.toLocaleString()} / ${this.totalTokensOut.toLocaleString()} tok` : '';
+        this.statusText  = `Chunk ${idx} / ${total}${tokStr}`;
       });
       this._es.onerror = () => {
         if (this.isRunning) this.toast('Lost connection to progress stream', 'warn');
@@ -427,7 +495,7 @@ window.appData = function () {
 
     async fetchReportContent(reportId, runId) {
       this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
-      this.reportFilter = ''; this.reportPage = 1;
+      this.reportFilter = ''; this.reportPage = 1; this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
       try {
         const res = await fetch(`/report?id=${encodeURIComponent(reportId)}&run_id=${encodeURIComponent(runId)}`);
         if (!res.ok) return;
@@ -456,6 +524,7 @@ window.appData = function () {
         this.fetchReportContent(entry.reportId, entry.runId);
       } else {
         this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
+        this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
       }
     },
 

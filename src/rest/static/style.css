@@ -237,6 +237,28 @@
 .dark .progress-fill {
   background: linear-gradient(90deg, #4c8dff, #7aa8ff);
 }
+.progress-track.running {
+  position: relative;
+  overflow: hidden;
+}
+.progress-track.running::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    -55deg,
+    transparent 0,
+    transparent 8px,
+    rgba(255,255,255,0.18) 8px,
+    rgba(255,255,255,0.18) 16px
+  );
+  background-size: 24px 100%;
+  animation: progress-stripes 0.7s linear infinite;
+}
+@keyframes progress-stripes {
+  from { background-position: 0 0; }
+  to   { background-position: 24px 0; }
+}
 
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 .toast-container {
