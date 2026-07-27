@@ -28,6 +28,8 @@ from s3_utils import (
 )
 from utils import get_reports_folder, is_s3_configured
 
+from tools.registry import REGISTRY
+
 VALID_PREFIXES = (
     "anthropic.claude-",
     "us.anthropic.claude-",
@@ -85,6 +87,18 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
         max_tok = llm.get("max_tokens")
         if not isinstance(max_tok, int) or max_tok <= 0:
             errors.append("llm.max_tokens must be a positive integer")
+        tools = llm.get("tools")
+        if tools is not None:
+            if not isinstance(tools, list):
+                errors.append("llm.tools must be a list of tool names")
+            else:
+                for t in tools:
+                    if not isinstance(t, str):
+                        errors.append(f"llm.tools entries must be strings, got: {t!r}")
+                    elif t not in REGISTRY:
+                        errors.append(
+                            f"llm.tools: unknown tool '{t}'. Available: {', '.join(sorted(REGISTRY))}"
+                        )
     if "report" not in configuration:
         errors.append("Missing 'report' section in configuration")
     else:

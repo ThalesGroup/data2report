@@ -37,6 +37,7 @@ from conf_utils import (
     get_report_config,
     save_report,
 )
+from tools.registry import list_tools as list_tool_registry
 from data2report import run_report
 from s3_utils import get_reports_bucket, get_data2report_prefix
 from utils import (
@@ -208,6 +209,11 @@ def stop_run():
     ev = get_stop_event(report_id, run_id)
     ev.set()
     return jsonify({"status": "stopping", "report_id": report_id, "run_id": run_id})
+
+
+@app.get("/api/tools")
+def _get_tools():
+    return jsonify(list_tool_registry())
 
 
 @app.get("/example-config")

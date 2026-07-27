@@ -12,22 +12,24 @@ function emptyCfg() {
   return {
     id: '',
     name: '',
-    llm: { model_id: MODEL_OPTIONS[0].value, system_prompt: '', temperature: 0.3, max_tokens: 1000 },
+    llm: { model_id: MODEL_OPTIONS[0].value, system_prompt: '', temperature: 0.3, max_tokens: 1000, tools: [] },
     report: { chunk_size: 100, incremental: false, max_workers: 4, output_format: null },
     input: { format: null, header: null },
   };
 }
 
 function cfgToJson(cfg) {
+  const llmOut = {
+    model_id: cfg.llm.model_id,
+    system_prompt: cfg.llm.system_prompt,
+    temperature: cfg.llm.temperature,
+    max_tokens: cfg.llm.max_tokens,
+  };
+  if (cfg.llm.tools && cfg.llm.tools.length > 0) llmOut.tools = cfg.llm.tools;
   const out = {
     id: cfg.id,
     name: cfg.name,
-    llm: {
-      model_id: cfg.llm.model_id,
-      system_prompt: cfg.llm.system_prompt,
-      temperature: cfg.llm.temperature,
-      max_tokens: cfg.llm.max_tokens,
-    },
+    llm: llmOut,
     report: {
       chunk_size: cfg.report.chunk_size,
       incremental: cfg.report.incremental,
@@ -52,6 +54,7 @@ function jsonToCfg(json) {
     base.llm.system_prompt = json.llm.system_prompt ?? '';
     base.llm.temperature   = json.llm.temperature   ?? 0.3;
     base.llm.max_tokens    = json.llm.max_tokens    ?? 1000;
+    base.llm.tools         = Array.isArray(json.llm.tools) ? json.llm.tools : [];
   }
   if (json.report) {
     base.report.chunk_size    = json.report.chunk_size    ?? 100;

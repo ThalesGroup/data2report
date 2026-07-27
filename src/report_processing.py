@@ -42,6 +42,7 @@ def process_chunks_folder(
         "input_tokens": 0,
         "output_tokens": 0,
     }
+    tool_calls = {}  # { tool_name: total_count }
     exists = 0
     chunk_files = os.listdir(chunks_folder)
     max_workers = report_config.get("max_workers", 1)
@@ -116,11 +117,14 @@ def process_chunks_folder(
     for result in results:
         llm_usage["input_tokens"] += result["usage"].get("input_tokens", 0)
         llm_usage["output_tokens"] += result["usage"].get("output_tokens", 0)
+        for name, count in result.get("tool_calls", {}).items():
+            tool_calls[name] = tool_calls.get(name, 0) + count
         if result["exists"]:
             exists += 1
 
     return {
         "llm_usage": llm_usage,
+        "tool_calls": tool_calls,
         "chunks": len(chunk_files),
         "chunks_skipped": exists,
         "final_report": chunked_reports_folder,
@@ -196,10 +200,12 @@ def _process_report(
         return {
             "exists": False,
             "usage": {"input_tokens": 0, "output_tokens": 0},
+            "tool_calls": {},
             "duration-seconds": 0,
             "_chunk_index": chunk_index,
         }
     exists = os.path.exists(output_file)
+    chunk_tool_calls = {}
     if exists:
         logging.info(
             f"Skipping chunk {chunk_index} processing, output file '{output_file}' already exists"
@@ -211,6 +217,7 @@ def _process_report(
             return {
                 "exists": False,
                 "usage": {"input_tokens": 0, "output_tokens": 0},
+                "tool_calls": {},
                 "duration-seconds": 0,
                 "_chunk_index": chunk_index,
             }
@@ -226,13 +233,17 @@ def _process_report(
             llm_config["model_id"],
             llm_config.get("max_tokens"),
             llm_config.get("temperature"),
+            tools=llm_config.get("tools"),
+            chunk_path=input_file,
         )
         usage = llm_result["usage"]
+        chunk_tool_calls = llm_result.get("tool_calls", {})
         _write_output_file(output_file, llm_result["content"], output_format)
     duration = (datetime.now() - start_time).seconds
     return {
         "exists": exists,
         "usage": usage,
+        "tool_calls": chunk_tool_calls,
         "duration-seconds": duration,
         "_chunk_index": chunk_index,
     }

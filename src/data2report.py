@@ -209,6 +209,7 @@ def run_report(
             else False and records is not None and records >= max_records
         ),
         "llm_usage": process_result["llm_usage"],
+        "tool_calls": process_result.get("tool_calls", {}),
         "chunks_skipped": process_result["chunks_skipped"],
         "duration_seconds": process_result["duration_seconds"],
         "longest_chunk_duration_seconds": process_result["longest_duration_seconds"],

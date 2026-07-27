@@ -63,6 +63,11 @@
     <button @click="activeTab = 'model'" :class="activeTab === 'model' ? 'tab-active' : 'tab-inactive'">
       Model
     </button>
+    <button @click="activeTab = 'tools'" :class="activeTab === 'tools' ? 'tab-active' : 'tab-inactive'">
+      Tools
+      <span x-show="cfg.llm.tools && cfg.llm.tools.length > 0"
+            class="ml-1 text-xs font-normal text-blue-500" x-text="'(' + cfg.llm.tools.length + ')'"></span>
+    </button>
     <button @click="activeTab = 'run'" :class="activeTab === 'run' ? 'tab-active' : 'tab-inactive'">
       Run
       <span x-show="isRunning" class="ml-1 w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse inline-block align-middle"></span>
@@ -235,6 +240,42 @@
             <p x-show="fieldErr('llm.max_tokens')" class="field-error" x-text="fieldErr('llm.max_tokens')"></p>
           </div>
         </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tab: Tools ───────────────────────────────────────────────── -->
+  <section x-show="activeTab === 'tools'" x-transition.opacity.duration.150ms>
+    <div class="card">
+      <div class="form-section space-y-4">
+
+        <!-- Info banner when tools are enabled -->
+        <div x-show="cfg.llm.tools && cfg.llm.tools.length > 0"
+             class="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-xs text-blue-700 dark:text-blue-300">
+          <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/>
+          </svg>
+          <span>Enabling tools switches this report to multi-turn invocation (Claude/Bedrock only). Prompt caching keeps cost bounded, but expect ~1.5–2× tokens per chunk.</span>
+        </div>
+
+        <!-- Tool list fetched from /api/tools -->
+        <div x-show="availableTools.length === 0" class="text-sm text-gray-400">Loading tools…</div>
+        <template x-for="tool in availableTools" :key="tool.name">
+          <div class="toggle-row">
+            <div class="flex-1 min-w-0">
+              <p class="field-label mb-0 font-mono" x-text="tool.name"></p>
+              <p class="field-hint mt-0.5" x-text="tool.description"></p>
+            </div>
+            <button type="button"
+                    @click="toggleTool(tool.name)"
+                    class="toggle shrink-0"
+                    :class="cfg.llm.tools.includes(tool.name) ? 'toggle--on' : ''">
+              <span class="toggle-thumb"
+                    :class="cfg.llm.tools.includes(tool.name) ? 'translate-x-5' : 'translate-x-0'"></span>
+            </button>
+          </div>
+        </template>
 
       </div>
     </div>
@@ -430,6 +471,16 @@
                   <td class="py-1.5 text-gray-500 dark:text-gray-400">Tokens out</td>
                   <td class="py-1.5 font-medium font-mono text-xs" x-text="selectedHistoryEntry.summary?.output_tokens != null ? selectedHistoryEntry.summary.output_tokens.toLocaleString() : '—'"></td>
                 </tr>
+                <tr x-show="Object.keys(selectedHistoryEntry.summary?.tool_calls ?? {}).length > 0">
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400 align-top">Tool calls</td>
+                  <td class="py-1.5">
+                    <div class="flex flex-wrap gap-1">
+                      <template x-for="[name, count] in Object.entries(selectedHistoryEntry.summary?.tool_calls ?? {})">
+                        <span class="chip chip-completed font-mono" x-text="name + ' ×' + count"></span>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
               </tbody>
             </table>
             <!-- Right: run config -->
@@ -460,6 +511,16 @@
                 <tr>
                   <td class="py-1.5 text-gray-500 dark:text-gray-400">Workers</td>
                   <td class="py-1.5 font-medium" x-text="selectedHistoryEntry.runConfig?.max_workers ?? '—'"></td>
+                </tr>
+                <tr x-show="selectedHistoryEntry.runConfig?.tools?.length > 0">
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400">Tools</td>
+                  <td class="py-1.5">
+                    <div class="flex flex-wrap gap-1">
+                      <template x-for="t in (selectedHistoryEntry.runConfig?.tools ?? [])" :key="t">
+                        <span class="chip chip-completed font-mono" x-text="t"></span>
+                      </template>
+                    </div>
+                  </td>
                 </tr>
               </tbody>
             </table>

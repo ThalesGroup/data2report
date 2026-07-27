@@ -62,6 +62,28 @@ To reduce costs and latency, the system applies preprocessing steps that minimiz
 ### Integrations  
 While the system does not directly connect to databases, it is designed to work smoothly with exported data. This approach encourages preprocessing—such as filtering and aggregating—before the data enters the reporting workflow, which helps improve both cost efficiency and performance. For example, AWS Athena can be used to generate the input files that feed into data2report, streamlining the integration of large-scale data sources.  
 
+### Agentic Tool Use
+Reports can be equipped with tools that the LLM can invoke during analysis, enabling an agentic loop rather than a single-pass read. When tools are configured, the LLM receives the data and tool schemas, calls tools as needed, and iterates until it has enough information to write the final report.
+
+Tools are declared in the report configuration under `llm.tools`:
+
+```json
+{
+  "llm": {
+    "model_id": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "tools": ["query_data", "chain_decoder"]
+  }
+}
+```
+
+Two built-in tools are available:
+
+**`query_data`** — Runs a read-only SQL `SELECT` against the current data chunk loaded into an in-memory SQLite database (table name: `chunk`). Useful for aggregations, counts, group-by queries, and filtered lookups over structured data. Guardrails: 100-row result cap, 3-second query timeout, 500-character cell truncation.
+
+**`chain_decoder`** — Greedily decodes obfuscated strings by chaining URL, base64, hex, gzip, UTF-8, and JS-escape decoders until the output stabilizes. Useful for revealing encoded payloads, commands, or shellcode found in attack logs. Guardrails: depth limit of 5, 4 KB output cap, printable-ratio check.
+
+Tool use is currently supported on AWS Bedrock with Claude models. Other providers fall back to single-shot mode. Custom tools can be added by creating a new file in `src/tools/` and registering it in `src/tools/registry.py`.
+
 ### Deployment
 Deployment is flexible, with multiple options to suit different environments. The system can run as a Docker container, providing reproducibility and consistency whether on a local machine, on-premises infrastructure, or in the cloud. For lightweight, event-driven use cases, AWS Lambda offers a serverless deployment option that minimizes infrastructure management. Both output reports and intermediate data can be stored locally or in object stores, depending on operational needs.
 

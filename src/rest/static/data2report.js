@@ -59,6 +59,9 @@ window.appData = function () {
     // History
     history: [],
 
+    // Tools
+    availableTools: [],
+
     // Toasts
     toasts: [],
 
@@ -163,6 +166,7 @@ window.appData = function () {
         this.fetchReportContent(this.history[0].reportId, this.history[0].runId);
       }
       this.refreshSavedReports();
+      this.fetchAvailableTools();
       this.pristineCfg = JSON.stringify(cfgToJson(this.cfg));
       window.addEventListener('beforeunload', (e) => {
         if (this.isDirty) { e.preventDefault(); e.returnValue = ''; }
@@ -385,6 +389,7 @@ window.appData = function () {
               stopped:               parsed.stopped              ?? false,
               input_tokens:          parsed.llm_usage?.input_tokens  ?? null,
               output_tokens:         parsed.llm_usage?.output_tokens ?? null,
+              tool_calls:            parsed.tool_calls           ?? {},
             };
             if (parsed.report_id && parsed.run_id) {
               reportLink = `/report?id=${encodeURIComponent(parsed.report_id)}&run_id=${encodeURIComponent(parsed.run_id)}`;
@@ -405,6 +410,7 @@ window.appData = function () {
             chunk_size:  payload.report.chunk_size,
             incremental: payload.report.incremental,
             max_workers: payload.report.max_workers,
+            tools:       payload.llm.tools ?? [],
           },
           summary, reportLink, s3Uri, outputFolder, errorMessage,
           totalTokensIn: this.totalTokensIn, totalTokensOut: this.totalTokensOut,
@@ -415,7 +421,7 @@ window.appData = function () {
         this.addToHistory({
           reportId: payload.id, runId, runName: this.runName.trim() || null, timestamp: new Date().toISOString(),
           status: 'failed',
-          runConfig: { model_id: payload.llm.model_id, temperature: payload.llm.temperature, max_tokens: payload.llm.max_tokens, chunk_size: payload.report.chunk_size, incremental: payload.report.incremental, max_workers: payload.report.max_workers },
+          runConfig: { model_id: payload.llm.model_id, temperature: payload.llm.temperature, max_tokens: payload.llm.max_tokens, chunk_size: payload.report.chunk_size, incremental: payload.report.incremental, max_workers: payload.report.max_workers, tools: payload.llm.tools ?? [] },
           summary: null, reportLink: null, s3Uri: null, outputFolder: null,
           errorMessage: 'Network error: ' + (e?.message || String(e)),
           totalTokensIn: this.totalTokensIn, totalTokensOut: this.totalTokensOut,
@@ -474,7 +480,7 @@ window.appData = function () {
         this.addToHistory({
           reportId: this.currentRun.reportId, runId: this.currentRun.runId,
           timestamp: new Date().toISOString(), runName: this.runName.trim() || null, status: 'stopped',
-          runConfig: { model_id: this.cfg.llm.model_id, temperature: this.cfg.llm.temperature, max_tokens: this.cfg.llm.max_tokens, chunk_size: this.cfg.report.chunk_size, incremental: this.cfg.report.incremental, max_workers: this.cfg.report.max_workers },
+          runConfig: { model_id: this.cfg.llm.model_id, temperature: this.cfg.llm.temperature, max_tokens: this.cfg.llm.max_tokens, chunk_size: this.cfg.report.chunk_size, incremental: this.cfg.report.incremental, max_workers: this.cfg.report.max_workers, tools: this.cfg.llm.tools ?? [] },
           summary: null, reportLink: null, s3Uri: null, outputFolder: null, errorMessage: null,
           totalTokensIn: this.totalTokensIn, totalTokensOut: this.totalTokensOut, durationMs: null,
         });
@@ -545,6 +551,26 @@ window.appData = function () {
     formatHistoryTime(iso) {
       try { return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }); }
       catch { return iso; }
+    },
+
+    // ── Tools ───────────────────────────────────────────────────────────
+
+    async fetchAvailableTools() {
+      try {
+        const res = await fetch('/api/tools');
+        if (res.ok) this.availableTools = await res.json();
+      } catch { /* non-fatal */ }
+    },
+
+    toggleTool(name) {
+      const tools = this.cfg.llm.tools;
+      const idx = tools.indexOf(name);
+      if (idx === -1) {
+        this.cfg.llm.tools = [...tools, name];
+      } else {
+        this.cfg.llm.tools = tools.filter(t => t !== name);
+      }
+      this.markDirty();
     },
 
     historyStatusClass(s) {

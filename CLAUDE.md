@@ -72,10 +72,26 @@ Input file (CSV/JSONL/Parquet/.gz)
 - **`data2report.py`** — top-level `run_report()` orchestrator; resolves config, splits input, kicks off processing
 - **`report_processing.py`** — chunk processing with `ThreadPoolExecutor`; incremental vs. parallel logic; merging final report
 - **`chunks_utils.py`** — file splitting into gzipped chunks by row count; format detection
-- **`llm_utils.py`** — model invocation for all supported providers; handles retries and response parsing
+- **`llm_utils.py`** — model invocation for all supported providers; single-shot path and agentic tool-use loop (Bedrock/Claude only); prompt caching
 - **`conf_utils.py`** — config loading, validation, and defaults; `validate_configuration()` is the canonical validator
 - **`s3_utils.py`** — S3 read/write/list operations
 - **`utils.py`** — path resolution, env vars, JSON extraction from LLM responses
+- **`tools/`** — LLM tool primitives (see below)
+
+### LLM Tools
+
+Reports can expose tools to the LLM via `llm.tools` in the config. When tools are present, `llm_utils` runs an agentic loop (Bedrock/Claude only; other providers fall back to single-shot). Without tools the pipeline is unchanged.
+
+**Tool registry**: `src/tools/registry.py` maps names → classes. Adding a primitive = one new file + one registry entry.
+
+**Current primitives:**
+
+| Tool | Purpose |
+|---|---|
+| `query_data` | Read-only SQL (`SELECT` only) over the current chunk via `sqlite3`. Table name: `chunk`. Returns `{columns, rows, truncated}`. Guardrails: 100-row cap, 3 s timeout, cell truncation. |
+| `chain_decoder` | Greedily decodes obfuscated strings (URL → base64 → hex → gzip → utf-8 → JS-escape). Returns `{decoded, chain, truncated}`. Guardrails: depth 5, 4 KB output cap, printable-ratio check. |
+
+**REST endpoint**: `GET /api/tools` returns `[{name, description}]` — used by the UI Tools tab.
 
 ### Report Configuration Schema
 
@@ -88,7 +104,8 @@ Configs are JSON files (stored locally or on S3) with this shape:
     "model_id": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "system_prompt": "...",
     "temperature": 0.3,
-    "max_tokens": 1000
+    "max_tokens": 1000,
+    "tools": ["query_data", "chain_decoder"]
   },
   "report": {
     "chunk_size": 100,
@@ -101,6 +118,8 @@ Configs are JSON files (stored locally or on S3) with this shape:
   }
 }
 ```
+
+`llm.tools` is optional — omitting it preserves the original single-shot behaviour. Tool names must match entries in `src/tools/registry.py`; `validate_configuration()` rejects unknown names.
 
 ### Environment Variables
 
