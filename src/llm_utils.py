@@ -15,8 +15,8 @@
 import json
 import logging
 import os
-
-import requests
+import urllib.error
+import urllib.request
 from boto3.session import Session
 from botocore.config import Config
 
@@ -235,10 +235,13 @@ def _resolve_model_id(model_id: str, session: Session) -> str:
 
 def _invoke_gemini_model(prompt_body: dict, model_id: str, api_key: str) -> dict:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-    response = requests.post(url, headers=headers, data=json.dumps(prompt_body))
-    response.raise_for_status()
-    return response.json()
+    data = json.dumps(prompt_body).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Gemini API error {e.code}: {e.read().decode()}") from e
 
 
 def _invoke_bedrock_model(prompt_body: dict, model_id: str, session: Session) -> dict:
