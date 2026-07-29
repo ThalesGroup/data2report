@@ -11,7 +11,6 @@ describe('emptyCfg', () => {
     expect(c.report.chunk_size).toBe(100);
     expect(c.report.incremental).toBe(false);
     expect(c.report.max_workers).toBe(4);
-    expect(c.report.output_format).toBeNull();
     expect(c.input.format).toBeNull();
     expect(c.input.header).toBeNull();
   });
@@ -22,14 +21,7 @@ describe('cfgToJson', () => {
     const cfg = emptyCfg();
     cfg.id = 'my_report'; cfg.name = 'My Report';
     const j = cfgToJson(cfg);
-    expect(j.report.output_format).toBeUndefined();
     expect(j.input).toBeUndefined();
-  });
-
-  test('includes output_format when set', () => {
-    const cfg = emptyCfg();
-    cfg.report.output_format = 'csv';
-    expect(cfgToJson(cfg).report.output_format).toBe('csv');
   });
 
   test('includes input block when format set', () => {
@@ -54,7 +46,6 @@ describe('jsonToCfg', () => {
     const original = emptyCfg();
     original.id = 'test'; original.name = 'Test';
     original.llm.system_prompt = 'You are helpful.';
-    original.report.output_format = 'jsonl';
     original.input.format = 'csv'; original.input.header = true;
     const round = jsonToCfg(cfgToJson(original));
     expect(round).toEqual(original);

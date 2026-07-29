@@ -124,6 +124,45 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
         if out_fmt is not None and out_fmt not in ("csv", "jsonl"):
             errors.append("report.output_format must be 'csv' or 'jsonl'")
 
+        output = rpt.get("output")
+        if output is not None:
+            if not isinstance(output, dict):
+                errors.append("report.output must be an object")
+            else:
+                allowed_output_keys = {"format", "schema"}
+                unknown_output_keys = set(output.keys()) - allowed_output_keys
+                if unknown_output_keys:
+                    errors.append(f"report.output: unknown keys: {', '.join(sorted(unknown_output_keys))}")
+                fmt = output.get("format")
+                if fmt is not None and fmt not in ("jsonl", "csv"):
+                    errors.append("report.output.format must be 'jsonl' or 'csv'")
+                schema = output.get("schema")
+                if schema is not None:
+                    if not isinstance(schema, list) or len(schema) == 0:
+                        errors.append("report.output.schema must be a non-empty list of column definitions")
+                    else:
+                        pk_count = 0
+                        valid_types = {"TEXT", "INTEGER", "REAL", "BLOB"}
+                        for i, col in enumerate(schema):
+                            if not isinstance(col, dict):
+                                errors.append(f"report.output.schema[{i}] must be an object")
+                                continue
+                            allowed_col_keys = {"name", "type", "primary_key", "description"}
+                            unknown_col_keys = set(col.keys()) - allowed_col_keys
+                            if unknown_col_keys:
+                                errors.append(f"report.output.schema[{i}]: unknown keys: {', '.join(sorted(unknown_col_keys))}")
+                            if not isinstance(col.get("name"), str) or not col["name"].strip():
+                                errors.append(f"report.output.schema[{i}].name is required and must be a non-empty string")
+                            col_type = col.get("type")
+                            if col_type not in valid_types:
+                                errors.append(f"report.output.schema[{i}].type must be one of: {', '.join(sorted(valid_types))}")
+                            if col.get("primary_key"):
+                                pk_count += 1
+                        if pk_count == 0:
+                            errors.append("report.output.schema must have exactly one column with primary_key: true")
+                        elif pk_count > 1:
+                            errors.append("report.output.schema must have exactly one column with primary_key: true (found multiple)")
+
         input_conf = configuration.get("input")
         if input_conf is not None:
             if not isinstance(input_conf, dict):

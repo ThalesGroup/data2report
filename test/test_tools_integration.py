@@ -236,3 +236,63 @@ def test_run_report_with_chain_decoder(reports_folder):
     with gzip.open(os.path.join(output_folder, "final_report.gz"), "rt") as f:
         lines = [l.strip() for l in f if l.strip()]
     assert len(lines) > 0
+
+
+# ── structured output (report.output) integration ────────────────────────────
+
+
+_CONF_WITH_OUTPUT = {
+    "id": "test_output_report",
+    "name": "Structured Output Integration Test",
+    "input": {"format": "csv", "header": True},
+    "llm": {
+        "model_id": _MODEL_ID,
+        "system_prompt": (
+            "You are a security analyst. Use query_data to count how many times each IP "
+            "appears in the chunk. Write one memory row per unique IP with its count."
+        ),
+        "temperature": 0.0,
+        "max_tokens": 500,
+        "tools": ["query_data"],
+    },
+    "report": {
+        "chunk_size": 20,
+        "incremental": True,
+        "max_workers": 1,
+        "output": {
+            "format": "jsonl",
+            "schema": [
+                {"name": "ip",    "type": "TEXT",    "primary_key": True},
+                {"name": "count", "type": "INTEGER"},
+            ],
+        },
+    },
+}
+
+
+def test_run_report_with_structured_output(reports_folder):
+    rows = (
+        [{"ip": "10.0.0.1", "port": "22"} for _ in range(10)]
+        + [{"ip": "10.0.0.2", "port": "80"} for _ in range(5)]
+        + [{"ip": "10.0.0.3", "port": "443"} for _ in range(5)]
+    )
+    input_file = _make_csv_gz(rows)
+
+    result = run_report(input_file, configuration=_CONF_WITH_OUTPUT)
+
+    assert result["llm_usage"]["input_tokens"] > 0
+    assert result["tool_calls"].get("memory", 0) >= 1
+
+    output_folder = result["output_folder"]
+    with gzip.open(os.path.join(output_folder, "final_report.gz"), "rt") as f:
+        output_rows = [json.loads(line) for line in f if line.strip()]
+
+    assert len(output_rows) > 0
+    ips = {r["ip"] for r in output_rows}
+    assert "10.0.0.1" in ips
+
+    for row in output_rows:
+        assert "ip" in row
+        assert "count" in row
+        assert isinstance(row["count"], int)
+        assert row["count"] > 0

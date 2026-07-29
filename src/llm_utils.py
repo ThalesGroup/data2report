@@ -32,15 +32,17 @@ def invoke_llm(
     session: Session = None,
     tools: list = None,
     chunk_path: str = None,
+    shared_tools: list = None,
 ) -> dict:
     logging.info(f"Going to invoke LLM. Model ID: {model_id}")
 
     initialized_tools = _setup_tools(tools, chunk_path)
+    all_tools = initialized_tools + (shared_tools or [])
 
-    if initialized_tools and "claude" in model_id:
+    if all_tools and "claude" in model_id:
         return _invoke_with_tool_loop(
             system_prompt, user_prompt, model_id, max_tokens, temperature,
-            initialized_tools, session,
+            all_tools, session,
         )
 
     prompt = _format_model_body(
@@ -71,6 +73,19 @@ def _setup_tools(tool_names: list, chunk_path: str) -> list:
             tool.setup(chunk_path)
         initialized.append(tool)
     return initialized
+
+
+def _truncate_val(v, max_len: int):
+    if isinstance(v, str) and len(v) > max_len:
+        return v[:max_len] + "…"
+    if isinstance(v, dict):
+        return {k: _truncate_val(vv, max_len) for k, vv in v.items()}
+    return v
+
+
+def _log_tool_call(iteration: int, tool_name: str, tool_input: dict, max_val_len: int = 120):
+    truncated = {k: _truncate_val(v, max_val_len) for k, v in tool_input.items()}
+    logging.info(f"Tool call [{iteration}]: {tool_name}({truncated})")
 
 
 def _invoke_with_tool_loop(
@@ -163,7 +178,7 @@ def _invoke_with_tool_loop(
             tool_input = block.get("input", {})
             tool_use_id = block["id"]
 
-            logging.info(f"Tool call [{iteration + 1}]: {tool_name}({tool_input})")
+            _log_tool_call(iteration + 1, tool_name, tool_input)
             tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
 
             tool = tool_map.get(tool_name)

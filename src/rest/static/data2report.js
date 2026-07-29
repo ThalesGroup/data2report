@@ -69,6 +69,16 @@ window.appData = function () {
     // Tools
     availableTools: [],
 
+    // Output section in Config tab (current run only)
+    outputRows: [],
+    outputColumns: [],
+    outputHasResults: false,
+
+    // Output section in History tab (selected history entry)
+    historyOutputRows: [],
+    historyOutputColumns: [],
+    historyOutputHasResults: false,
+
     // Toasts
     toasts: [],
 
@@ -271,6 +281,7 @@ window.appData = function () {
         this.cfg = jsonToCfg(await res.json());
         this.pristineCfg = JSON.stringify(cfgToJson(this.cfg));
         this.isDirty = false;
+        this._resetRunState();
         this._validateFields();
         this.$nextTick(() => {
           const ta = document.getElementById('cfg-prompt');
@@ -346,6 +357,7 @@ window.appData = function () {
       this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
       this.reportFilter = ''; this.reportPage = 1; this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
       this.chunks = []; this.totalTokensIn = 0; this.totalTokensOut = 0; this.totalElapsedSec = null;
+      this.outputRows = []; this.outputColumns = []; this.outputHasResults = false;
       if (this._crawlTimer) { clearInterval(this._crawlTimer); this._crawlTimer = null; }
     },
 
@@ -412,6 +424,7 @@ window.appData = function () {
             if (parsed.report_id && parsed.run_id) {
               reportLink = `/report?id=${encodeURIComponent(parsed.report_id)}&run_id=${encodeURIComponent(parsed.run_id)}`;
               await this.fetchReportContent(parsed.report_id, parsed.run_id);
+              await this.fetchOutput(parsed.report_id, parsed.run_id);
             }
             s3Uri        = parsed.s3_uri       ?? null;
             outputFolder = parsed.output_folder ?? null;
@@ -458,9 +471,29 @@ window.appData = function () {
     subscribeProgress(reportId, runId) {
       if (this._es) { try { this._es.close(); } catch {} }
       this._es = new EventSource(`/progress/stream?report_id=${encodeURIComponent(reportId)}&run_id=${encodeURIComponent(runId)}`);
-      this._es.addEventListener('hello', () => { this.statusText = 'Splitting data…'; if (this.progress < 10) this.progress = 10; });
+      this._es.addEventListener('hello', () => { if (this.progress < 5) this.progress = 5; });
       this._es.addEventListener('progress', (e) => {
         const evt   = JSON.parse(e.data);
+        if (evt.event === 'status') {
+          if (evt.status === 'splitting') {
+            this.statusText = 'Splitting data…';
+            this.progress = Math.max(this.progress, 10);
+          } else if (evt.status === 'processing') {
+            this.statusText = `Processing 0 / ${evt.chunks}…`;
+            this.progress = Math.max(this.progress, 15);
+          }
+          return;
+        }
+        if (evt.event === 'chunk_started') {
+          const idx   = evt.chunk_index ?? 1;
+          const total = evt.total_chunks ?? 1;
+          const ex = this.chunks.find(c => c.index === idx);
+          if (!ex) this.chunks.push({ index: idx, total, status: 'running', tokensIn: 0, tokensOut: 0, durationSec: null });
+          else ex.status = 'running';
+          this.statusText = `Chunk ${idx} / ${total}…`;
+          this.progress = Math.max(15, Math.min(99, Math.floor(((idx - 1) / total) * 100)));
+          return;
+        }
         const idx   = evt.chunk_index ?? evt.completed_chunks ?? 1;
         const total = evt.total_chunks ?? 1;
         const tokIn  = evt.usage?.input_tokens  ?? 0;
@@ -476,7 +509,7 @@ window.appData = function () {
           this.chunks.forEach(c => { if (c.status === 'running') c.status = 'done'; });
           this.chunks.push({ index: idx, total, status: 'done', tokensIn: tokIn, tokensOut: tokOut, durationSec: dur });
         }
-        this.progress    = Math.max(10, Math.min(99, Math.floor((idx / total) * 100)));
+        this.progress    = Math.max(15, Math.min(99, Math.floor((idx / total) * 100)));
         const tokStr = this.totalTokensIn > 0 ? ` · ${this.totalTokensIn.toLocaleString()} / ${this.totalTokensOut.toLocaleString()} tok` : '';
         this.statusText  = `Chunk ${idx} / ${total}${tokStr}`;
       });
@@ -549,9 +582,11 @@ window.appData = function () {
       const entry = this.history[i];
       if (entry?.reportId && entry?.runId) {
         this.fetchReportContent(entry.reportId, entry.runId);
+        this.fetchHistoryOutput(entry.reportId, entry.runId);
       } else {
         this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
         this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
+        this.historyOutputRows = []; this.historyOutputColumns = []; this.historyOutputHasResults = false;
       }
     },
 
@@ -662,6 +697,88 @@ window.appData = function () {
         error:     'chip chip-failed',
         stopped:   'chip chip-stopped',
       }[s] ?? 'chip';
+    },
+
+    // ── Output tab ──────────────────────────────────────────────────────
+
+    async fetchOutput(reportId, runId) {
+      this.outputRows = []; this.outputColumns = []; this.outputHasResults = false;
+      try {
+        const res = await fetch(`/api/output/${encodeURIComponent(reportId)}/${encodeURIComponent(runId)}`);
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (rows.length > 0) {
+          this.outputColumns = Object.keys(rows[0]);
+          this.outputRows = rows;
+          this.outputHasResults = true;
+        }
+      } catch { /* non-fatal */ }
+    },
+
+    async fetchHistoryOutput(reportId, runId) {
+      this.historyOutputRows = []; this.historyOutputColumns = []; this.historyOutputHasResults = false;
+      try {
+        const res = await fetch(`/api/output/${encodeURIComponent(reportId)}/${encodeURIComponent(runId)}`);
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (rows.length > 0) {
+          this.historyOutputColumns = Object.keys(rows[0]);
+          this.historyOutputRows = rows;
+          this.historyOutputHasResults = true;
+        }
+      } catch { /* non-fatal */ }
+    },
+
+    addOutputColumn() {
+      this.cfg.report.output.schema.push({ name: '', type: 'TEXT', primary_key: false, description: '' });
+      this.markDirty();
+    },
+
+    removeOutputColumn(idx) {
+      this.cfg.report.output.schema = this.cfg.report.output.schema.filter((_, i) => i !== idx);
+      this.markDirty();
+    },
+
+    setOutputPK(idx) {
+      this.cfg.report.output.schema = this.cfg.report.output.schema.map((c, i) => ({
+        ...c, primary_key: i === idx,
+      }));
+      this.markDirty();
+    },
+
+    _downloadRows(rows, columns, format, filename) {
+      if (!rows.length) return;
+      let content, mime, ext;
+      if (format === 'csv') {
+        const escape = v => {
+          const s = v == null ? '' : String(v);
+          return s.includes(',') || s.includes('"') || s.includes('\n')
+            ? '"' + s.replace(/"/g, '""') + '"'
+            : s;
+        };
+        content = [columns.map(escape).join(','), ...rows.map(r => columns.map(c => escape(r[c])).join(','))].join('\n');
+        mime = 'text/csv'; ext = 'csv';
+      } else {
+        content = rows.map(r => JSON.stringify(r)).join('\n');
+        mime = 'application/jsonl'; ext = 'jsonl';
+      }
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${filename}.${ext}`; a.click();
+      URL.revokeObjectURL(url);
+    },
+
+    downloadOutput(format) {
+      this._downloadRows(this.outputRows, this.outputColumns, format, 'output');
+    },
+
+    downloadHistoryOutput(format) {
+      this._downloadRows(this.historyOutputRows, this.historyOutputColumns, format, 'output');
+    },
+
+    get isClaudeModel() {
+      return this.cfg.llm.model_id?.toLowerCase().includes('claude') ?? false;
     },
   };
 };

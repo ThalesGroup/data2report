@@ -217,6 +217,44 @@ def _get_tools():
     return jsonify(list_tool_registry())
 
 
+@app.get("/api/output/<report_id>/<run_id>")
+def _get_output(report_id: str, run_id: str):
+    folder = get_report_folder(report_id, run_id)
+    for ext in ("jsonl", "csv"):
+        candidate = os.path.join(folder, f"final_report.{ext}.gz")
+        if os.path.exists(candidate):
+            rows = []
+            with gzip.open(candidate, "rt") as f:
+                if ext == "csv":
+                    import csv as _csv
+                    reader = _csv.DictReader(f)
+                    rows = list(reader)
+                else:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                rows.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
+            return jsonify(rows)
+    # Fall back: try the default final_report.gz and parse as JSONL
+    default = os.path.join(folder, get_final_report_name())
+    if os.path.exists(default):
+        rows = []
+        with gzip.open(default, "rt") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        rows.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+        if rows:
+            return jsonify(rows)
+    return jsonify([])
+
+
 _COMPARE_MAX_TOKENS = 4096
 _COMPARE_TEMPERATURE = 0.3
 _COMPARE_SYSTEM_PROMPT = (

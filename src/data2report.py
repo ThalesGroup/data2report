@@ -145,6 +145,8 @@ def run_report(
     chunks_folder = os.path.join(work_folder, "chunks")
     if not max_records:
         max_records = configuration["report"].get("max_records")
+    if progress_cb:
+        progress_cb({"event": "status", "status": "splitting"})
     chunks, records = split_input_file(
         chunks_folder,
         input_file,
@@ -156,6 +158,8 @@ def run_report(
     logging.info(
         f"Report '{report_id}' run '{run_id}' chunk size '{chunk_size}' prepared: {chunks} chunks, {records} records"
     )
+    if progress_cb:
+        progress_cb({"event": "status", "status": "processing", "chunks": chunks})
     report_chunks_folder = os.path.join(work_folder, "chunk_reports")
     process_result = process_chunks_folder(
         chunks_folder,
@@ -178,6 +182,7 @@ def run_report(
         final_report_file,
         configuration["llm"],
         configuration["report"],
+        memory_tool=process_result.get("_memory_tool"),
     )
     if is_s3_configured():
         output_key = final_report_file[len(get_reports_folder()) + 1 :]
@@ -211,6 +216,7 @@ def run_report(
         "llm_usage": process_result["llm_usage"],
         "tool_calls": process_result.get("tool_calls", {}),
         "chunks_skipped": process_result["chunks_skipped"],
+        "chunks_with_unexpected_text": process_result.get("chunks_with_unexpected_text", 0),
         "duration_seconds": process_result["duration_seconds"],
         "longest_chunk_duration_seconds": process_result["longest_duration_seconds"],
         "s3_uri": s3_uri,
