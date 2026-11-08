@@ -174,13 +174,32 @@ def _get_report():
         get_report_folder(report_id, run_id), get_final_report_name()
     )
     if not os.path.exists(report_file_name):
-        return (
-            jsonify({"error": f"Report file '{report_file_name}' does not exist"}),
-            404,
-        )
+        logging.warning(f"Report file '{report_file_name}' does not exist")
+        return jsonify({"error": "Report not found"}), 404
     with gzip.open(report_file_name, "rt") as report_file:
         content = report_file.read()
+    if request.args.get("format") == "json":
+        as_json = _jsonl_to_json(content)
+        if as_json is not None:
+            return Response(as_json, mimetype="application/json")
     return Response(content, mimetype="text/plain")
+
+
+def _jsonl_to_json(content: str):
+    """Return a pretty-printed JSON array if every line is a JSON object, else None."""
+    rows = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            return None
+        if not isinstance(row, dict):
+            return None
+        rows.append(row)
+    return json.dumps(rows, indent=2, ensure_ascii=False) if rows else None
 
 
 @app.route("/progress/stream", methods=["GET"])

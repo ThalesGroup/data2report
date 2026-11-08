@@ -51,6 +51,8 @@ window.appData = function () {
     reportRows: [],
     reportColumns: [],
     reportFormat: null,
+    reportLoadState: 'idle',   // idle | loading | ok | missing | empty
+    _reportFetchSeq: 0,
     reportFilter: '',
     reportPage: 1,
     reportPageSize: 25,
@@ -411,6 +413,7 @@ window.appData = function () {
     },
 
     _resetRunState() {
+      this._reportFetchSeq++; this.reportLoadState = 'idle';
       this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
       this.reportFilter = ''; this.reportPage = 1; this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
       this.chunks = []; this.totalTokensIn = 0; this.totalTokensOut = 0; this.totalElapsedSec = null;
@@ -459,7 +462,7 @@ window.appData = function () {
         let parsed   = null;
         try { parsed = JSON.parse(text); } catch {}
 
-        let summary = null, reportLink = null, s3Uri = null, outputFolder = null, errorMessage = null;
+        let summary = null, reportLink = null, errorMessage = null;
 
         if (!res.ok) {
           errorMessage = parsed?.error || parsed?.errors?.join('; ') || text;
@@ -483,8 +486,6 @@ window.appData = function () {
               await this.fetchReportContent(parsed.report_id, parsed.run_id);
               await this.fetchOutput(parsed.report_id, parsed.run_id);
             }
-            s3Uri        = parsed.s3_uri       ?? null;
-            outputFolder = parsed.output_folder ?? null;
           }
         }
         this.progress = 100;
@@ -501,7 +502,7 @@ window.appData = function () {
             max_workers: payload.report.max_workers,
             tools:       payload.llm.tools ?? [],
           },
-          summary, reportLink, s3Uri, outputFolder, errorMessage,
+          summary, reportLink, errorMessage,
           totalTokensIn: this.totalTokensIn, totalTokensOut: this.totalTokensOut,
           durationMs: Date.now() - t0,
         });
@@ -511,7 +512,7 @@ window.appData = function () {
           reportId: payload.id, runId, runName: this.runName.trim() || null, timestamp: new Date().toISOString(),
           status: 'failed',
           runConfig: { model_id: payload.llm.model_id, temperature: payload.llm.temperature, max_tokens: payload.llm.max_tokens, chunk_size: payload.report.chunk_size, incremental: payload.report.incremental, max_workers: payload.report.max_workers, tools: payload.llm.tools ?? [] },
-          summary: null, reportLink: null, s3Uri: null, outputFolder: null,
+          summary: null, reportLink: null,
           errorMessage: 'Network error: ' + (e?.message || String(e)),
           totalTokensIn: this.totalTokensIn, totalTokensOut: this.totalTokensOut,
           durationMs: Date.now() - t0,
@@ -591,7 +592,7 @@ window.appData = function () {
           timestamp: new Date().toISOString(), runName: this.runName.trim() || null, status: 'stopped',
           fileName: this.fileName || null,
           runConfig: { model_id: this.cfg.llm.model_id, temperature: this.cfg.llm.temperature, max_tokens: this.cfg.llm.max_tokens, chunk_size: this.cfg.report.chunk_size, incremental: this.cfg.report.incremental, max_workers: this.cfg.report.max_workers, tools: this.cfg.llm.tools ?? [] },
-          summary: null, reportLink: null, s3Uri: null, outputFolder: null, errorMessage: null,
+          summary: null, reportLink: null, errorMessage: null,
           totalTokensIn: this.totalTokensIn, totalTokensOut: this.totalTokensOut, durationMs: null,
         });
       } catch (e) { this.toast('Failed to stop: ' + e.message, 'err'); }
@@ -612,15 +613,22 @@ window.appData = function () {
     async fetchReportContent(reportId, runId) {
       this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
       this.reportFilter = ''; this.reportPage = 1; this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
+      const seq = ++this._reportFetchSeq;   // ignore responses from superseded requests
+      this.reportLoadState = 'loading';
       try {
         const res = await fetch(`/report?id=${encodeURIComponent(reportId)}&run_id=${encodeURIComponent(runId)}`);
-        if (!res.ok) return;
+        if (seq !== this._reportFetchSeq) return;
+        if (!res.ok) { this.reportLoadState = 'missing'; return; }
         const { format, columns, rows } = parseReportContent(await res.text());
+        if (seq !== this._reportFetchSeq) return;
         this.reportFormat  = format;
         this.reportColumns = columns;
         this.reportRows    = rows;
+        this.reportLoadState = rows.length ? 'ok' : 'empty';
         this.hasClearable  = true;
-      } catch { /* non-fatal */ }
+      } catch {
+        if (seq === this._reportFetchSeq) this.reportLoadState = 'missing';
+      }
     },
 
     // ── History ─────────────────────────────────────────────────────────
@@ -641,6 +649,7 @@ window.appData = function () {
         this.fetchReportContent(entry.reportId, entry.runId);
         this.fetchHistoryOutput(entry.reportId, entry.runId);
       } else {
+        this._reportFetchSeq++; this.reportLoadState = 'idle';
         this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
         this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
         this.historyOutputRows = []; this.historyOutputColumns = []; this.historyOutputHasResults = false;
