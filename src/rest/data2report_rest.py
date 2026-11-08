@@ -369,4 +369,7 @@ if __name__ == "__main__":
             f"S3 configured. Reports Bucket: {get_reports_bucket()}. Prefix: {get_data2report_prefix()}"
         )
     init_env_from_file()
-    app.run(host="0.0.0.0", port=os.getenv("APP_PORT", port))
+    debug = os.environ.get("APP_DEBUG", "").lower() in ("1", "true", "yes")
+    # The Werkzeug debugger allows code execution, so keep it off the network.
+    host = os.environ.get("APP_HOST", "127.0.0.1" if debug else "0.0.0.0")
+    app.run(host=host, port=os.getenv("APP_PORT", port), debug=debug)

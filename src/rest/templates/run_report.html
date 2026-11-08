@@ -64,6 +64,11 @@
     <button @click="activeTab = 'model'" :class="activeTab === 'model' ? 'tab-active' : 'tab-inactive'">
       Model
     </button>
+    <button @click="activeTab = 'tools'" :class="activeTab === 'tools' ? 'tab-active' : 'tab-inactive'">
+      Tools
+      <span x-show="cfg.llm.tools && cfg.llm.tools.length > 0"
+            class="ml-1 text-xs font-normal text-gray-400" x-text="'(' + cfg.llm.tools.length + ')'"></span>
+    </button>
 
     <button @click="activeTab = 'run'" :class="activeTab === 'run' ? 'tab-active' : 'tab-inactive'">
       Run
@@ -333,7 +338,12 @@
 
       </div>
 
-      <!-- Tools -->
+    </div>
+  </section>
+
+  <!-- ── Tab: Tools ─────────────────────────────────────────────────── -->
+  <section x-show="activeTab === 'tools'" x-transition.opacity.duration.150ms>
+    <div class="card">
       <div class="form-section space-y-4">
         <h3 class="form-section-title">
           Tools
@@ -347,7 +357,7 @@
           <div class="toggle-row">
             <div class="flex-1 min-w-0">
               <p class="field-label mb-0 font-mono" x-text="tool.name"></p>
-              <p class="field-hint mt-0.5" x-text="tool.description"></p>
+              <p class="tool-desc mt-0.5" x-text="tool.description"></p>
             </div>
             <button type="button"
                     @click="toggleTool(tool.name)"

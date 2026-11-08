@@ -115,6 +115,10 @@ class QueryDataTool:
         "The table is named 'chunk'. All columns are TEXT — use CAST when needed. "
         "Use this to get exact counts, top-N rankings, or filtered rows."
     )
+    ui_description = (
+        "Makes the chunk data accessible via SQL, so the LLM can get exact counts, "
+        "rankings, and filtered rows instead of estimating from the raw text."
+    )
 
     def __init__(self):
         self._conn: Optional[sqlite3.Connection] = None

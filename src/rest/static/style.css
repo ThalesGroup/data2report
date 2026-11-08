@@ -322,6 +322,8 @@
 }
 .dark .field-label-value { color: #4c8dff; }
 .field-hint { font-size: 11px; color: #9ca3af; }
+.tool-desc { font-size: 13px; line-height: 1.4; color: #6b7280; }
+.dark .tool-desc { color: #9ca3af; }
 .field-error { font-size: 11px; color: #dc2626; font-weight: 500; }
 .dark .field-error { color: #f87171; }
 .required { color: #dc2626; }

@@ -32,6 +32,7 @@ class ChainDecoderTool:
         "decoders in a greedy chain until the output stabilizes. "
         "Useful for decoding payloads, commands, or shellcode found in attack logs."
     )
+    ui_description = "Lets the model decode obfuscated or encoded strings."
 
     def setup(self, chunk_path: str) -> None:
         pass  # stateless — no per-chunk init needed

@@ -1,5 +1,8 @@
 const HISTORY_KEY  = 'd2r_history';
 const THEME_KEY    = 'd2r_theme';
+const TAB_KEY      = 'd2r_tab';
+const REPORT_KEY   = 'd2r_report';
+const TABS         = ['config', 'model', 'tools', 'run', 'history'];
 const HISTORY_MAX  = 10;
 let _toastId = 0;
 
@@ -188,11 +191,16 @@ window.appData = function () {
     init() {
       this.applyTheme(localStorage.getItem(THEME_KEY) || 'light');
       this.restoreHistory();
+      const { tab } = this._readUrl();
+      const startTab = tab ?? localStorage.getItem(TAB_KEY);
+      if (TABS.includes(startTab)) this.activeTab = startTab;
+      this.$watch('activeTab', t => { localStorage.setItem(TAB_KEY, t); this._syncUrl(); });
+      window.addEventListener('hashchange', () => this._onHashChange());
       if (this.history.length > 0) {
         this.selectedHistoryIdx = 0;
         this.fetchReportContent(this.history[0].reportId, this.history[0].runId);
       }
-      this.refreshSavedReports();
+      this.refreshSavedReports().then(() => this._restoreSelectedReport());
       this.fetchAvailableTools();
       this.fetchCompareAvailable();
       this.pristineCfg = JSON.stringify(cfgToJson(this.cfg));
@@ -271,6 +279,43 @@ window.appData = function () {
       } catch { /* non-fatal */ }
     },
 
+    // ── URL state (#tab=model&report=my_report) ─────────────────────────
+
+    _readUrl() {
+      const p = new URLSearchParams(location.hash.slice(1));
+      const tab = p.get('tab');
+      return { tab: TABS.includes(tab) ? tab : null, report: p.get('report') };
+    },
+
+    _syncUrl() {
+      const p = new URLSearchParams();
+      p.set('tab', this.activeTab);
+      if (this.selectedSavedReport) p.set('report', this.selectedSavedReport);
+      const hash = '#' + p.toString();
+      if (location.hash !== hash) location.hash = hash;
+    },
+
+    _onHashChange() {   // back/forward button or manually edited URL
+      const { tab, report } = this._readUrl();
+      if (tab && tab !== this.activeTab) this.activeTab = tab;
+      if (report && report !== this.selectedSavedReport) this._openReport(report);
+    },
+
+    async _restoreSelectedReport() {
+      const id = this._readUrl().report ?? localStorage.getItem(REPORT_KEY);
+      if (id) await this._openReport(id);
+      this._syncUrl();
+    },
+
+    async _openReport(id) {
+      if (!this.savedReports.some(r => (r.id ?? r) === id)) {
+        if (localStorage.getItem(REPORT_KEY) === id) localStorage.removeItem(REPORT_KEY);  // deleted
+        return;
+      }
+      this.selectedSavedReport = id;
+      await this.loadConfig();
+    },
+
     async loadConfig() {
       if (this.isDirty && !confirm('Discard unsaved changes and load?')) return;
       const id = this.selectedSavedReport;
@@ -279,6 +324,8 @@ window.appData = function () {
         const res = await fetch(`/report-config?id=${encodeURIComponent(id)}`);
         if (!res.ok) throw new Error(await res.text());
         this.cfg = jsonToCfg(await res.json());
+        localStorage.setItem(REPORT_KEY, id);
+        this._syncUrl();
         this.pristineCfg = JSON.stringify(cfgToJson(this.cfg));
         this.isDirty = false;
         this._resetRunState();
@@ -308,6 +355,8 @@ window.appData = function () {
         this.isDirty = false;
         await this.refreshSavedReports();
         this.selectedSavedReport = payload.id;
+        localStorage.setItem(REPORT_KEY, payload.id);
+        this._syncUrl();
         this.toast(`Saved: ${resp.id}`);
       } catch (e) {
         this.toast('Failed to save: ' + e.message, 'err');

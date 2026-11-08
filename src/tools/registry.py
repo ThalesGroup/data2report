@@ -25,7 +25,10 @@ REGISTRY = {
 def list_tools() -> list[dict]:
     """Return [{name, description}] for every registered tool."""
     return [
-        {"name": cls.name, "description": cls.description}
+        {
+            "name": cls.name,
+            "description": getattr(cls, "ui_description", cls.description),
+        }
         for cls in REGISTRY.values()
     ]
 
