@@ -19,8 +19,10 @@ import tempfile
 
 import pytest
 
+from tools.calculate import CalculateTool
 from tools.chain_decoder import ChainDecoderTool, _decode_chain
 from tools.query_data import QueryDataTool, load_chunk_into_sqlite
+from tools.regex_extract import RegexExtractTool
 from tools.registry import get_tool, list_tools, REGISTRY
 from conf_utils import validate_configuration
 from conftest import get_config
@@ -58,6 +60,8 @@ class TestRegistry:
         names = [t["name"] for t in tools]
         assert "query_data" in names
         assert "chain_decoder" in names
+        assert "calculate" in names
+        assert "regex_extract" in names
 
     def test_list_tools_has_descriptions(self):
         for t in list_tools():
@@ -237,3 +241,184 @@ class TestValidateConfigurationTools:
         cfg["llm"]["tools"] = [42]
         errs = validate_configuration(cfg, None)
         assert any("must be strings" in e for e in errs)
+
+
+# ── CalculateTool ─────────────────────────────────────────────────────────────
+
+
+class TestCalculateTool:
+    def _calc(self, expression):
+        return CalculateTool().run({"expression": expression})
+
+    @pytest.mark.parametrize(
+        "expression,expected",
+        [
+            ("1 + 2 * 3", 7),
+            ("(1 + 2) * 3", 9),
+            ("7 // 2", 3),
+            ("7 % 4", 3),
+            ("2 ** 10", 1024),
+            ("-5 + +2", -3),
+            ("sum([1, 2, 3, 4])", 10),
+            ("mean([2, 4, 6])", 4),
+            ("median([5, 1, 3])", 3),
+            ("max(3, 9, 4)", 9),
+            ("round(7 / 3, 2)", 2.33),
+            ("sqrt(16)", 4),
+            ("len([1, 2, 3])", 3),
+            ("percentile([1, 2, 3, 4, 5], 50)", 3),
+            ("percentile([10, 20], 25)", 12.5),
+            ("pct_change(120, 150)", 25),
+            ("pct_change(200, 100)", -50),
+        ],
+    )
+    def test_expressions(self, expression, expected):
+        assert self._calc(expression)["result"] == pytest.approx(expected)
+
+    def test_constants(self):
+        assert self._calc("round(pi, 2)")["result"] == 3.14
+
+    def test_stdev(self):
+        assert self._calc("stdev([2, 4, 4, 4, 5, 5, 7, 9])")["result"] == pytest.approx(
+            2.138, abs=1e-3
+        )
+
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            "__import__('os').system('ls')",
+            "open('/etc/passwd')",
+            "().__class__",
+            "[x for x in range(3)]",
+            "'a' * 3",
+            "True + 1",
+            "lambda: 1",
+            "mean(values=[1, 2])",
+            "unknown + 1",
+        ],
+    )
+    def test_rejects_unsafe_or_unsupported(self, expression):
+        assert "error" in self._calc(expression)
+
+    def test_division_by_zero(self):
+        assert self._calc("1 / 0") == {"error": "division by zero"}
+
+    def test_pct_change_from_zero(self):
+        assert "error" in self._calc("pct_change(0, 5)")
+
+    def test_huge_exponent_rejected(self):
+        assert "error" in self._calc("9 ** 9 ** 9")
+        assert "error" in self._calc("10 ** 100000")
+
+    def test_non_finite_result(self):
+        assert "error" in self._calc("exp(1000)")
+
+    def test_empty_and_syntax_errors(self):
+        assert "error" in self._calc("")
+        assert "error" in self._calc("1 +")
+
+    def test_too_long(self):
+        assert "error" in self._calc("1+" * 2000 + "1")
+
+    def test_schema_shape(self):
+        schema = CalculateTool().schema()
+        assert schema["name"] == "calculate"
+        assert schema["input_schema"]["required"] == ["expression"]
+
+
+# ── RegexExtractTool ──────────────────────────────────────────────────────────
+
+
+class TestRegexExtractTool:
+    ROWS = [
+        {"id": "1", "msg": "login from 10.0.0.1 failed", "user": "alice"},
+        {"id": "2", "msg": "login from 10.0.0.2 ok, then 10.0.0.3", "user": "bob"},
+        {"id": "3", "msg": "no address here", "user": "carol"},
+        {"id": "4", "msg": "LOGIN from 192.168.1.9", "user": "dave"},
+    ]
+
+    def _tool(self):
+        tool = RegexExtractTool()
+        tool.setup(_make_csv_gz(self.ROWS))
+        return tool
+
+    def test_column_matches_and_counts(self):
+        r = self._tool().run({"pattern": r"\d+\.\d+\.\d+\.\d+", "column": "msg"})
+        assert [m["match"] for m in r["matches"]] == [
+            "10.0.0.1", "10.0.0.2", "10.0.0.3", "192.168.1.9",
+        ]
+        assert r["match_count"] == 4
+        assert r["rows_with_match"] == 3
+        assert r["rows_scanned"] == 4
+        assert r["truncated"] is False
+
+    def test_row_ids_returned(self):
+        r = self._tool().run({"pattern": r"10\.0\.0\.\d", "column": "msg"})
+        assert [m["row"] for m in r["matches"]] == [1, 2, 2]
+
+    def test_capture_groups(self):
+        r = self._tool().run({"pattern": r"from (\d+)\.(\d+)", "column": "msg"})
+        assert r["matches"][0]["groups"] == ["10", "0"]
+
+    def test_named_groups(self):
+        r = self._tool().run({"pattern": r"from (?P<first>\d+)\.", "column": "msg"})
+        assert r["matches"][0]["named"] == {"first": "10"}
+
+    def test_ignore_case(self):
+        tool = self._tool()
+        assert tool.run({"pattern": "login", "column": "msg"})["match_count"] == 2
+        assert tool.run({"pattern": "login", "column": "msg", "ignore_case": True})["match_count"] == 3
+
+    def test_max_matches_truncates_but_counts_all(self):
+        r = self._tool().run({"pattern": r"10\.0\.0\.\d", "column": "msg", "max_matches": 1})
+        assert len(r["matches"]) == 1
+        assert r["match_count"] == 3
+        assert r["truncated"] is True
+
+    def test_text_mode(self):
+        r = RegexExtractTool().run({"pattern": r"[A-Z]{3}-\d+", "text": "see ABC-12 and XYZ-9"})
+        assert [m["match"] for m in r["matches"]] == ["ABC-12", "XYZ-9"]
+        assert r["matches"][0]["row"] is None
+
+    def test_no_match(self):
+        r = self._tool().run({"pattern": "zzz", "column": "msg"})
+        assert r["matches"] == [] and r["match_count"] == 0
+
+    def test_works_on_jsonl(self):
+        tool = RegexExtractTool()
+        tool.setup(_make_jsonl_gz([{"a": "x1"}, {"a": "y22"}]))
+        r = tool.run({"pattern": r"\d+", "column": "a"})
+        assert [m["match"] for m in r["matches"]] == ["1", "22"]
+
+    def test_unknown_column(self):
+        r = self._tool().run({"pattern": "a", "column": "nope"})
+        assert "unknown column" in r["error"]
+
+    def test_requires_exactly_one_source(self):
+        assert "error" in self._tool().run({"pattern": "a"})
+        assert "error" in self._tool().run({"pattern": "a", "column": "msg", "text": "x"})
+
+    def test_column_without_chunk(self):
+        assert "error" in RegexExtractTool().run({"pattern": "a", "column": "msg"})
+
+    def test_invalid_regex(self):
+        assert "invalid regex" in self._tool().run({"pattern": "(", "column": "msg"})["error"]
+
+    def test_missing_pattern(self):
+        assert "error" in self._tool().run({"column": "msg"})
+
+    def test_pattern_too_long(self):
+        assert "error" in self._tool().run({"pattern": "a" * 501, "column": "msg"})
+
+    @pytest.mark.parametrize("pattern", ["(a+)+$", "(.*)*x", "(\\w+\\s*)+", "(a|b*)+"])
+    def test_nested_quantifiers_rejected(self, pattern):
+        assert "nested quantifiers" in RegexExtractTool().run({"pattern": pattern, "text": "aaa"})["error"]
+
+    def test_long_values_clipped(self):
+        r = RegexExtractTool().run({"pattern": "a+", "text": "a" * 1500})
+        assert len(r["matches"][0]["match"]) <= 501
+
+    def test_schema_shape(self):
+        schema = RegexExtractTool().schema()
+        assert schema["name"] == "regex_extract"
+        assert schema["input_schema"]["required"] == ["pattern"]

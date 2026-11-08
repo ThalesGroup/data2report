@@ -71,6 +71,7 @@ window.appData = function () {
 
     // Tools
     availableTools: [],
+    toolSearch: '',
 
     // Output section in Config tab (current run only)
     outputRows: [],
@@ -98,6 +99,13 @@ window.appData = function () {
         && Object.keys(this.fieldErrors).length === 0
         && this.cfg.id.trim() && this.cfg.name.trim()
         && this.cfg.llm.model_id && this.cfg.llm.system_prompt.trim();
+    },
+
+    get filteredTools() {
+      const q = this.toolSearch.trim().toLowerCase();
+      if (!q) return this.availableTools;
+      return this.availableTools.filter(t =>
+        t.name.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q));
     },
 
     get filteredReportRows() {

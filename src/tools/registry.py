@@ -12,13 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from tools.calculate import CalculateTool
 from tools.chain_decoder import ChainDecoderTool
 from tools.query_data import QueryDataTool
+from tools.regex_extract import RegexExtractTool
 
 # Maps tool name → class. Add new primitives here.
 REGISTRY = {
     QueryDataTool.name: QueryDataTool,
     ChainDecoderTool.name: ChainDecoderTool,
+    CalculateTool.name: CalculateTool,
+    RegexExtractTool.name: RegexExtractTool,
 }
 
 

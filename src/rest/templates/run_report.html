@@ -351,9 +351,16 @@
                 class="ml-1 text-xs font-normal text-blue-500" x-text="'(' + cfg.llm.tools.length + ' enabled)'"></span>
         </h3>
 
+        <!-- Search -->
+        <input type="search" x-model="toolSearch" placeholder="Search tools…"
+               x-show="availableTools.length > 0" class="input-base" aria-label="Search tools"/>
+
         <!-- Tool list fetched from /api/tools -->
         <div x-show="availableTools.length === 0" class="text-sm text-gray-400">Loading tools…</div>
-        <template x-for="tool in availableTools" :key="tool.name">
+        <div x-show="availableTools.length > 0 && filteredTools.length === 0" class="text-sm text-gray-400">
+          No tools match “<span x-text="toolSearch"></span>”.
+        </div>
+        <template x-for="tool in filteredTools" :key="tool.name">
           <div class="toggle-row">
             <div class="flex-1 min-w-0">
               <p class="field-label mb-0 font-mono" x-text="tool.name"></p>
@@ -623,13 +630,15 @@
                   <td class="py-1.5 text-gray-500 dark:text-gray-400">Tokens out</td>
                   <td class="py-1.5 font-medium font-mono text-xs" x-text="selectedHistoryEntry.summary?.output_tokens != null ? selectedHistoryEntry.summary.output_tokens.toLocaleString() : '—'"></td>
                 </tr>
-                <tr x-show="Object.entries(selectedHistoryEntry.summary?.tool_calls ?? {}).filter(([n]) => n !== 'memory').length > 0">
+                <tr x-show="selectedHistoryEntry.summary">
                   <td class="py-1.5 text-gray-500 dark:text-gray-400 align-top">Tool calls</td>
                   <td class="py-1.5">
                     <div class="flex flex-wrap gap-1">
-                      <template x-for="[name, count] in Object.entries(selectedHistoryEntry.summary?.tool_calls ?? {}).filter(([n]) => n !== 'memory')">
+                      <template x-for="[name, count] in Object.entries(selectedHistoryEntry.summary?.tool_calls ?? {}).filter(([n]) => n !== 'memory')" :key="name">
                         <span class="chip chip-completed font-mono" x-text="name + ' ×' + count"></span>
                       </template>
+                      <span x-show="Object.keys(selectedHistoryEntry.summary?.tool_calls ?? {}).filter(n => n !== 'memory').length === 0"
+                            class="text-xs text-gray-400">none</span>
                     </div>
                   </td>
                 </tr>
