@@ -24,6 +24,7 @@ from tools.chain_decoder import ChainDecoderTool, _decode_chain
 from tools.query_data import QueryDataTool, load_chunk_into_sqlite
 from tools.regex_extract import RegexExtractTool
 from tools.registry import get_tool, list_tools, REGISTRY
+from tools.template_cluster import TemplateClusterTool, to_template
 from conf_utils import validate_configuration
 from conftest import get_config
 
@@ -62,6 +63,7 @@ class TestRegistry:
         assert "chain_decoder" in names
         assert "calculate" in names
         assert "regex_extract" in names
+        assert "template_cluster" in names
 
     def test_list_tools_has_descriptions(self):
         for t in list_tools():
@@ -422,3 +424,105 @@ class TestRegexExtractTool:
         schema = RegexExtractTool().schema()
         assert schema["name"] == "regex_extract"
         assert schema["input_schema"]["required"] == ["pattern"]
+
+
+# ── TemplateClusterTool ───────────────────────────────────────────────────────
+
+
+class TestToTemplate:
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("took 120 ms", "took <NUM> ms"),
+            ("took 3.5 s", "took <NUM> s"),
+            ("login from 10.0.0.1 failed", "login from <IP> failed"),
+            ("user a@b.com logged in", "user <EMAIL> logged in"),
+            ("id 123e4567-e89b-12d3-a456-426614174000 done", "id <UUID> done"),
+            ("at 2026-11-05T10:20:30Z ok", "at <TS> ok"),
+            ("at 2026-11-05 ok", "at <TS> ok"),
+            ("at 10:20:30 ok", "at <TIME> ok"),
+            ("hash d41d8cd98f00b204e9800998ecf8427e seen", "hash <HEX> seen"),
+            ("addr 0xdeadbeef", "addr <HEX>"),
+            ("session abc123def456ghi7 expired", "session <ID> expired"),
+            ("a   b\t c", "a b c"),
+            ("user123 stays", "user123 stays"),
+            ("no variables", "no variables"),
+        ],
+    )
+    def test_masks(self, text, expected):
+        assert to_template(text) == expected
+
+
+class TestTemplateClusterTool:
+    ROWS = (
+        [{"id": str(i), "msg": f"login from 10.0.0.{i} failed after {i} tries"} for i in range(1, 6)]
+        + [{"id": "6", "msg": "disk full on /dev/sda1"}]
+        + [{"id": "7", "msg": "disk full on /dev/sda1"}]
+        + [{"id": "8", "msg": "service restarted"}]
+        + [{"id": "9", "msg": ""}]
+    )
+
+    def _tool(self, rows=None):
+        tool = TemplateClusterTool()
+        tool.setup(_make_csv_gz(rows or self.ROWS))
+        return tool
+
+    def test_groups_and_counts(self):
+        r = self._tool().run({"column": "msg"})
+        top = r["templates"][0]
+        assert top["template"] == "login from <IP> failed after <NUM> tries"
+        assert top["count"] == 5
+        assert top["percent"] == 62.5  # share of non-empty rows (5 of 8)
+        assert r["distinct_templates"] == 3
+        assert r["rows_scanned"] == 9
+        assert r["empty_rows"] == 1
+        assert r["truncated"] is False
+
+    def test_sorted_by_count_desc(self):
+        counts = [t["count"] for t in self._tool().run({"column": "msg"})["templates"]]
+        assert counts == sorted(counts, reverse=True)
+
+    def test_example_and_row(self):
+        top = self._tool().run({"column": "msg"})["templates"][0]
+        assert top["example"] == "login from 10.0.0.1 failed after 1 tries"
+        assert top["example_row"] == 1
+
+    def test_ascending_returns_rarest_first(self):
+        r = self._tool().run({"column": "msg", "ascending": True})
+        assert r["templates"][0]["template"] == "service restarted"
+
+    def test_max_templates_truncates(self):
+        r = self._tool().run({"column": "msg", "max_templates": 1})
+        assert len(r["templates"]) == 1
+        assert r["distinct_templates"] == 3
+        assert r["truncated"] is True
+
+    def test_works_on_jsonl(self):
+        tool = TemplateClusterTool()
+        tool.setup(_make_jsonl_gz([{"m": "err 1"}, {"m": "err 2"}, {"m": "ok"}]))
+        r = tool.run({"column": "m"})
+        assert r["templates"][0] == {
+            "template": "err <NUM>", "count": 2, "percent": 66.7,
+            "example": "err 1", "example_row": 1,
+        }
+
+    def test_unknown_column(self):
+        assert "unknown column" in self._tool().run({"column": "nope"})["error"]
+
+    def test_missing_column(self):
+        assert "error" in self._tool().run({})
+
+    def test_bad_max_templates(self):
+        assert "error" in self._tool().run({"column": "msg", "max_templates": "x"})
+
+    def test_no_chunk(self):
+        assert "error" in TemplateClusterTool().run({"column": "msg"})
+
+    def test_long_values_clipped(self):
+        r = self._tool([{"m": "x" * 900}]).run({"column": "m"})
+        assert len(r["templates"][0]["example"]) <= 301
+
+    def test_schema_shape(self):
+        schema = TemplateClusterTool().schema()
+        assert schema["name"] == "template_cluster"
+        assert schema["input_schema"]["required"] == ["column"]

@@ -16,6 +16,7 @@ from tools.calculate import CalculateTool
 from tools.chain_decoder import ChainDecoderTool
 from tools.query_data import QueryDataTool
 from tools.regex_extract import RegexExtractTool
+from tools.template_cluster import TemplateClusterTool
 
 # Maps tool name → class. Add new primitives here.
 REGISTRY = {
@@ -23,6 +24,7 @@ REGISTRY = {
     ChainDecoderTool.name: ChainDecoderTool,
     CalculateTool.name: CalculateTool,
     RegexExtractTool.name: RegexExtractTool,
+    TemplateClusterTool.name: TemplateClusterTool,
 }
 
 
