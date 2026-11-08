@@ -22,6 +22,16 @@ from botocore.config import Config
 
 _MAX_TOOL_ITERATIONS = 6
 
+# Claude models for which Bedrock rejects the `temperature` parameter.
+_NO_TEMPERATURE_MARKERS = ("opus-5",)
+
+
+def _claude_sampling_params(model_id: str, temperature) -> dict:
+    """Return {"temperature": t} unless unset or deprecated for this model."""
+    if temperature is None or any(m in model_id for m in _NO_TEMPERATURE_MARKERS):
+        return {}
+    return {"temperature": temperature}
+
 
 def invoke_llm(
     system_prompt: str,
@@ -138,7 +148,7 @@ def _invoke_with_tool_loop(
             "messages": messages,
             "tools": tool_schemas,
             "max_tokens": max_tokens,
-            "temperature": temperature,
+            **_claude_sampling_params(model_id, temperature),
         }
 
         response = bedrock.invoke_model(
@@ -295,7 +305,7 @@ def _format_model_body(
                 }
             ],
             "max_tokens": max_tokens,
-            "temperature": temperature,
+            **_claude_sampling_params(model_id, temperature),
         }
     elif "jamba" in model_id:
         body = {

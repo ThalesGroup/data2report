@@ -82,7 +82,9 @@ def validate_configuration(configuration: dict, report_id: Optional[str]) -> Lis
                 "llm.system_prompt is required and must be a non-empty string"
             )
         temp = llm.get("temperature")
-        if temp is None or not (0 <= temp <= 1):
+        if temp is not None and not (
+            isinstance(temp, (int, float)) and 0 <= temp <= 1
+        ):
             errors.append("llm.temperature must be between 0 and 1")
         max_tok = llm.get("max_tokens")
         if not isinstance(max_tok, int) or max_tok <= 0:
