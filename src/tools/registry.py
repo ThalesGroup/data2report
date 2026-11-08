@@ -14,6 +14,7 @@
 
 from tools.calculate import CalculateTool
 from tools.chain_decoder import ChainDecoderTool
+from tools.cve_search import CveSearchTool
 from tools.query_data import QueryDataTool
 from tools.regex_extract import RegexExtractTool
 from tools.template_cluster import TemplateClusterTool
@@ -23,6 +24,7 @@ REGISTRY = {
     QueryDataTool.name: QueryDataTool,
     ChainDecoderTool.name: ChainDecoderTool,
     CalculateTool.name: CalculateTool,
+    CveSearchTool.name: CveSearchTool,
     RegexExtractTool.name: RegexExtractTool,
     TemplateClusterTool.name: TemplateClusterTool,
 }

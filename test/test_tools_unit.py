@@ -21,6 +21,8 @@ import pytest
 
 from tools.calculate import CalculateTool
 from tools.chain_decoder import ChainDecoderTool, _decode_chain
+import tools.cve_search as cve_search_module
+from tools.cve_search import CveSearchTool
 from tools.query_data import QueryDataTool, load_chunk_into_sqlite
 from tools.regex_extract import RegexExtractTool
 from tools.registry import get_tool, list_tools, REGISTRY
@@ -64,6 +66,7 @@ class TestRegistry:
         assert "calculate" in names
         assert "regex_extract" in names
         assert "template_cluster" in names
+        assert "cve_search" in names
 
     def test_list_tools_has_descriptions(self):
         for t in list_tools():
@@ -526,3 +529,199 @@ class TestTemplateClusterTool:
         schema = TemplateClusterTool().schema()
         assert schema["name"] == "template_cluster"
         assert schema["input_schema"]["required"] == ["column"]
+
+
+# ── CveSearchTool ─────────────────────────────────────────────────────────────
+
+
+def _nvd_cve(cve_id="CVE-2021-44228", kev=True):
+    cve = {
+        "id": cve_id,
+        "published": "2021-12-10T10:15:09.143",
+        "lastModified": "2024-01-01T00:00:00.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+            {"lang": "es", "value": "descripcion"},
+            {"lang": "en", "value": "Apache Log4j2 JNDI features allow RCE."},
+        ],
+        "metrics": {
+            "cvssMetricV2": [{"cvssData": {"version": "2.0", "baseScore": 9.3}, "baseSeverity": "HIGH"}],
+            "cvssMetricV31": [
+                {"type": "Secondary", "cvssData": {"version": "3.1", "baseScore": 8.0, "baseSeverity": "HIGH", "vectorString": "SEC"}},
+                {"type": "Primary", "cvssData": {"version": "3.1", "baseScore": 10.0, "baseSeverity": "CRITICAL", "vectorString": "CVSS:3.1/AV:N"}},
+            ],
+        },
+        "weaknesses": [{"description": [
+            {"lang": "en", "value": "CWE-502"}, {"lang": "en", "value": "CWE-20"},
+            {"lang": "en", "value": "NVD-CWE-Other"},
+        ]}],
+        "references": [{"url": f"https://example.com/{i}"} for i in range(6)],
+    }
+    if kev:
+        cve["cisaExploitAdd"] = "2021-12-10"
+    return {"cve": cve}
+
+
+@pytest.fixture
+def nvd(monkeypatch):
+    """Patch the NVD HTTP call; returns a list recording the params of each request."""
+    class Calls(list):
+        response = None
+
+    cve_search_module._cache.clear()
+    calls = Calls()
+    response = {"totalResults": 1, "vulnerabilities": [_nvd_cve()]}
+
+    def fake_get(params):
+        calls.append(params)
+        return response
+
+    monkeypatch.setattr(cve_search_module, "_http_get_json", fake_get)
+    calls.response = response
+    return calls
+
+
+class TestCveSearchTool:
+    def test_lookup_by_id(self, nvd):
+        r = CveSearchTool().run({"cve_id": "cve-2021-44228"})
+        assert nvd == [{"cveId": "CVE-2021-44228"}]
+        item = r["results"][0]
+        assert item["id"] == "CVE-2021-44228"
+        assert item["cvss"] == {"version": "3.1", "score": 10.0, "severity": "CRITICAL", "vector": "CVSS:3.1/AV:N"}
+        assert item["description"] == "Apache Log4j2 JNDI features allow RCE."
+        assert item["cwes"] == ["CWE-20", "CWE-502"]
+        assert item["in_cisa_kev"] is True
+        assert len(item["references"]) == 3
+        assert r["total_results"] == 1 and r["truncated"] is False
+
+    def test_falls_back_to_older_cvss(self, nvd):
+        cve = nvd.response["vulnerabilities"][0]["cve"]
+        del cve["metrics"]["cvssMetricV31"]
+        item = CveSearchTool().run({"cve_id": "CVE-2021-44228"})["results"][0]
+        assert item["cvss"]["version"] == "2.0" and item["cvss"]["score"] == 9.3
+
+    def test_missing_metrics_and_kev(self, nvd):
+        nvd.response["vulnerabilities"] = [_nvd_cve(kev=False)]
+        nvd.response["vulnerabilities"][0]["cve"]["metrics"] = {}
+        item = CveSearchTool().run({"cve_id": "CVE-2021-44228"})["results"][0]
+        assert item["cvss"] is None and item["in_cisa_kev"] is False
+
+    def test_keyword_search_params(self, nvd):
+        CveSearchTool().run({"keyword": "log4j", "severity": "critical", "max_results": 3})
+        assert nvd == [{"keywordSearch": "log4j", "resultsPerPage": 3, "cvssV3Severity": "CRITICAL"}]
+
+    def test_max_results_capped(self, nvd):
+        CveSearchTool().run({"keyword": "x", "max_results": 500})
+        assert nvd[0]["resultsPerPage"] == 10
+
+    def test_truncated_when_more_results_exist(self, nvd):
+        nvd.response["totalResults"] = 42
+        r = CveSearchTool().run({"keyword": "apache"})
+        assert r["total_results"] == 42 and r["truncated"] is True
+
+    def test_long_description_clipped(self, nvd):
+        nvd.response["vulnerabilities"][0]["cve"]["descriptions"] = [{"lang": "en", "value": "x" * 2000}]
+        item = CveSearchTool().run({"cve_id": "CVE-2021-44228"})["results"][0]
+        assert len(item["description"]) <= 601
+
+    def test_unknown_cve(self, nvd):
+        nvd.response["vulnerabilities"] = []
+        nvd.response["totalResults"] = 0
+        assert "not found" in CveSearchTool().run({"cve_id": "CVE-1999-0001"})["error"]
+
+    def test_keyword_no_results_is_not_an_error(self, nvd):
+        nvd.response["vulnerabilities"] = []
+        nvd.response["totalResults"] = 0
+        assert CveSearchTool().run({"keyword": "zzzz"})["results"] == []
+
+    def test_results_are_cached(self, nvd):
+        tool = CveSearchTool()
+        tool.run({"cve_id": "CVE-2021-44228"})
+        tool.run({"cve_id": "CVE-2021-44228"})
+        assert len(nvd) == 1
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            {},
+            {"cve_id": "CVE-2021-44228", "keyword": "log4j"},
+            {"cve_id": "not-a-cve"},
+            {"cve_id": "CVE-2021-44228; DROP"},
+            {"keyword": "x" * 101},
+            {"keyword": "log4j", "severity": "SEVERE"},
+            {"keyword": "log4j", "max_results": "many"},
+        ],
+    )
+    def test_invalid_input_makes_no_request(self, nvd, args):
+        assert "error" in CveSearchTool().run(args)
+        assert nvd == []
+
+    def test_network_error_returned_not_raised(self, monkeypatch):
+        cve_search_module._cache.clear()
+
+        def boom(params):
+            raise RuntimeError("could not reach NVD: down")
+
+        monkeypatch.setattr(cve_search_module, "_http_get_json", boom)
+        assert CveSearchTool().run({"keyword": "log4j"}) == {"error": "could not reach NVD: down"}
+
+    def test_schema_shape(self):
+        schema = CveSearchTool().schema()
+        assert schema["name"] == "cve_search"
+        assert set(schema["input_schema"]["properties"]) == {"cve_id", "keyword", "severity", "max_results"}
+
+
+class TestCveSearchHttp:
+    """The real _http_get_json, with urlopen mocked."""
+
+    class _Resp:
+        def __init__(self, body):
+            self._body = body
+
+        def read(self, n=-1):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def test_success_sends_api_key_and_params(self, monkeypatch):
+        seen = {}
+
+        def fake_urlopen(request, timeout):
+            seen["url"], seen["headers"], seen["timeout"] = request.full_url, dict(request.header_items()), timeout
+            return self._Resp(b'{"totalResults": 0, "vulnerabilities": []}')
+
+        monkeypatch.setenv("NVD_API_KEY", "secret")
+        monkeypatch.setattr(cve_search_module.urllib.request, "urlopen", fake_urlopen)
+        data = cve_search_module._http_get_json({"keywordSearch": "a b"})
+        assert data["totalResults"] == 0
+        assert seen["url"].endswith("?keywordSearch=a+b")
+        assert seen["headers"]["Apikey"] == "secret"
+        assert seen["timeout"] == 10
+
+    @pytest.mark.parametrize("code,text", [(403, "rate limit"), (429, "rate limit"), (404, "404"), (500, "HTTP 500")])
+    def test_http_errors(self, monkeypatch, code, text):
+        def fake_urlopen(request, timeout):
+            raise cve_search_module.urllib.error.HTTPError(request.full_url, code, "x", {}, None)
+
+        monkeypatch.setattr(cve_search_module.urllib.request, "urlopen", fake_urlopen)
+        with pytest.raises(RuntimeError, match=text):
+            cve_search_module._http_get_json({"cveId": "CVE-2021-44228"})
+
+    def test_connection_error(self, monkeypatch):
+        def fake_urlopen(request, timeout):
+            raise cve_search_module.urllib.error.URLError("no route")
+
+        monkeypatch.setattr(cve_search_module.urllib.request, "urlopen", fake_urlopen)
+        with pytest.raises(RuntimeError, match="could not reach NVD"):
+            cve_search_module._http_get_json({})
+
+    def test_invalid_json(self, monkeypatch):
+        monkeypatch.setattr(
+            cve_search_module.urllib.request, "urlopen", lambda r, timeout: self._Resp(b"<html>")
+        )
+        with pytest.raises(RuntimeError, match="invalid response"):
+            cve_search_module._http_get_json({})

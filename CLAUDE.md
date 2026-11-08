@@ -84,12 +84,7 @@ Reports can expose tools to the LLM via `llm.tools` in the config. When tools ar
 
 **Tool registry**: `src/tools/registry.py` maps names → classes. Adding a primitive = one new file + one registry entry.
 
-**Current primitives:**
-
-| Tool | Purpose |
-|---|---|
-| `query_data` | Read-only SQL (`SELECT` only) over the current chunk via `sqlite3`. Table name: `chunk`. Returns `{columns, rows, truncated}`. Guardrails: 100-row cap, 3 s timeout, cell truncation. |
-| `chain_decoder` | Greedily decodes obfuscated strings (URL → base64 → hex → gzip → utf-8 → JS-escape). Returns `{decoded, chain, truncated}`. Guardrails: depth 5, 4 KB output cap, printable-ratio check. |
+Each tool implements the protocol in `src/tools/base.py` (`name`, `description`, `setup`, `schema`, `run`) and may set a short `ui_description`, shown in the UI Tools tab instead of the detailed model-facing `description`. The registry is the source of truth for which tools exist; each tool's module documents its own guardrails. Tools that call external services must say so in their descriptions.
 
 **REST endpoint**: `GET /api/tools` returns `[{name, description}]` — used by the UI Tools tab.
 
