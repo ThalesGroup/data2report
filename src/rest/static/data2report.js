@@ -75,11 +75,6 @@ window.appData = function () {
     availableTools: [],
     toolSearch: '',
 
-    // Output section in Config tab (current run only)
-    outputRows: [],
-    outputColumns: [],
-    outputHasResults: false,
-
     // Output section in History tab (selected history entry)
     historyOutputRows: [],
     historyOutputColumns: [],
@@ -417,7 +412,6 @@ window.appData = function () {
       this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
       this.reportFilter = ''; this.reportPage = 1; this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
       this.chunks = []; this.totalTokensIn = 0; this.totalTokensOut = 0; this.totalElapsedSec = null;
-      this.outputRows = []; this.outputColumns = []; this.outputHasResults = false;
       if (this._crawlTimer) { clearInterval(this._crawlTimer); this._crawlTimer = null; }
     },
 
@@ -484,7 +478,6 @@ window.appData = function () {
             if (parsed.report_id && parsed.run_id) {
               reportLink = `/report?id=${encodeURIComponent(parsed.report_id)}&run_id=${encodeURIComponent(parsed.run_id)}`;
               await this.fetchReportContent(parsed.report_id, parsed.run_id);
-              await this.fetchOutput(parsed.report_id, parsed.run_id);
             }
           }
         }
@@ -767,20 +760,6 @@ window.appData = function () {
 
     // ── Output tab ──────────────────────────────────────────────────────
 
-    async fetchOutput(reportId, runId) {
-      this.outputRows = []; this.outputColumns = []; this.outputHasResults = false;
-      try {
-        const res = await fetch(`/api/output/${encodeURIComponent(reportId)}/${encodeURIComponent(runId)}`);
-        if (!res.ok) return;
-        const rows = await res.json();
-        if (rows.length > 0) {
-          this.outputColumns = Object.keys(rows[0]);
-          this.outputRows = rows;
-          this.outputHasResults = true;
-        }
-      } catch { /* non-fatal */ }
-    },
-
     async fetchHistoryOutput(reportId, runId) {
       this.historyOutputRows = []; this.historyOutputColumns = []; this.historyOutputHasResults = false;
       try {
@@ -833,10 +812,6 @@ window.appData = function () {
       const a = document.createElement('a');
       a.href = url; a.download = `${filename}.${ext}`; a.click();
       URL.revokeObjectURL(url);
-    },
-
-    downloadOutput(format) {
-      this._downloadRows(this.outputRows, this.outputColumns, format, 'output');
     },
 
     downloadHistoryOutput(format) {
