@@ -473,8 +473,10 @@
         </div>
         <button @click="clearHistory()" class="ml-auto text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
       </div>
+      <div class="max-h-44 overflow-y-auto">
       <template x-for="(entry, i) in history" :key="i">
         <div class="px-4 py-2.5 text-xs transition-colors border-b border-gray-50 dark:border-gray-800/50 last:border-0 flex items-start gap-2"
+             x-effect="if (selectedHistoryIdx === i) $nextTick(() => $el.scrollIntoView({ block: 'nearest' }))"
              :class="selectedHistoryIdx === i ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'">
           <!-- Compare checkbox -->
           <input x-show="compareAvailable" type="checkbox"
@@ -507,6 +509,7 @@
           </div>
         </div>
       </template>
+      </div>
     </div>
 
     <!-- Compare result panel -->
@@ -608,6 +611,17 @@
                     </div>
                   </td>
                 </tr>
+                <tr x-show="historyOutputHasResults && selectedHistoryEntry.reportId && selectedHistoryEntry.runId">
+                  <td class="py-1.5 text-gray-500 dark:text-gray-400 align-top">Structured output</td>
+                  <td class="py-1.5">
+                    <a :href="'/api/output/' + encodeURIComponent(selectedHistoryEntry.reportId) + '/' + encodeURIComponent(selectedHistoryEntry.runId)"
+                       target="_blank" rel="noopener"
+                       class="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                      View (<span x-text="historyOutputRows.length.toLocaleString()"></span> rows)
+                    </a>
+                    <p class="text-xs text-gray-400 mt-0.5">Intermediate data the model wrote via the memory tool while building the report.</p>
+                  </td>
+                </tr>
               </tbody>
             </table>
             <!-- Right: run config -->
@@ -674,7 +688,7 @@
             <input x-model="reportFilter" @input="reportPage = 1" type="text" placeholder="Filter all columns…"
                    class="input-sm ml-auto w-48"/>
           </div>
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto" style="min-height:24rem">
             <table class="text-xs" style="table-layout:fixed; min-width:100%">
               <colgroup>
                 <template x-for="col in reportColumns" :key="'cg-'+col">
@@ -742,38 +756,6 @@
         <div x-show="selectedHistoryEntry.status === 'completed' && reportLoadState === 'empty'"
              class="text-center text-xs text-gray-400 py-4">
           The report is empty.
-        </div>
-
-        <!-- Structured output table -->
-        <div x-show="historyOutputHasResults" class="card overflow-hidden">
-          <div class="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex-wrap gap-y-2">
-            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Structured output</span>
-            <span class="text-xs text-gray-400" x-text="historyOutputRows.length.toLocaleString() + ' rows'"></span>
-            <div class="ml-auto flex gap-2">
-              <button @click="downloadHistoryOutput('jsonl')" class="btn-sm-ghost px-3 py-1.5 text-xs">Download JSONL</button>
-              <button @click="downloadHistoryOutput('csv')"  class="btn-sm-ghost px-3 py-1.5 text-xs">Download CSV</button>
-            </div>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="text-xs w-full">
-              <thead class="bg-gray-50 dark:bg-gray-800/60">
-                <tr>
-                  <template x-for="col in historyOutputColumns" :key="'ho-th-'+col">
-                    <th class="text-left py-2 px-3 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap" x-text="col"></th>
-                  </template>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                <template x-for="(row, i) in historyOutputRows" :key="'ho-r-'+i">
-                  <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                    <template x-for="col in historyOutputColumns" :key="'ho-c-'+col">
-                      <td class="py-2 px-3 font-mono text-gray-700 dark:text-gray-300 whitespace-nowrap max-w-xs truncate" x-text="row[col] ?? ''"></td>
-                    </template>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
         </div>
 
       </div>

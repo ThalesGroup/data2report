@@ -77,7 +77,6 @@ window.appData = function () {
 
     // Output section in History tab (selected history entry)
     historyOutputRows: [],
-    historyOutputColumns: [],
     historyOutputHasResults: false,
 
     // Toasts
@@ -477,7 +476,6 @@ window.appData = function () {
             };
             if (parsed.report_id && parsed.run_id) {
               reportLink = `/report?id=${encodeURIComponent(parsed.report_id)}&run_id=${encodeURIComponent(parsed.run_id)}`;
-              await this.fetchReportContent(parsed.report_id, parsed.run_id);
             }
           }
         }
@@ -630,7 +628,7 @@ window.appData = function () {
       this.history.unshift(entry);
       if (this.history.length > HISTORY_MAX) this.history = this.history.slice(0, HISTORY_MAX);
       this.persistHistory();
-      this.selectedHistoryIdx = 0;
+      this.selectHistory(0);   // loads report data + structured output for the new run
       this.activeTab = 'history';
     },
 
@@ -645,7 +643,7 @@ window.appData = function () {
         this._reportFetchSeq++; this.reportLoadState = 'idle';
         this.reportRows = []; this.reportColumns = []; this.reportFormat = null;
         this.reportColFilters = {}; this.reportSort = { col: null, dir: 1 };
-        this.historyOutputRows = []; this.historyOutputColumns = []; this.historyOutputHasResults = false;
+        this.historyOutputRows = []; this.historyOutputHasResults = false;
       }
     },
 
@@ -761,13 +759,12 @@ window.appData = function () {
     // ── Output tab ──────────────────────────────────────────────────────
 
     async fetchHistoryOutput(reportId, runId) {
-      this.historyOutputRows = []; this.historyOutputColumns = []; this.historyOutputHasResults = false;
+      this.historyOutputRows = []; this.historyOutputHasResults = false;
       try {
         const res = await fetch(`/api/output/${encodeURIComponent(reportId)}/${encodeURIComponent(runId)}`);
         if (!res.ok) return;
         const rows = await res.json();
         if (rows.length > 0) {
-          this.historyOutputColumns = Object.keys(rows[0]);
           this.historyOutputRows = rows;
           this.historyOutputHasResults = true;
         }
@@ -789,33 +786,6 @@ window.appData = function () {
         ...c, primary_key: i === idx,
       }));
       this.markDirty();
-    },
-
-    _downloadRows(rows, columns, format, filename) {
-      if (!rows.length) return;
-      let content, mime, ext;
-      if (format === 'csv') {
-        const escape = v => {
-          const s = v == null ? '' : String(v);
-          return s.includes(',') || s.includes('"') || s.includes('\n')
-            ? '"' + s.replace(/"/g, '""') + '"'
-            : s;
-        };
-        content = [columns.map(escape).join(','), ...rows.map(r => columns.map(c => escape(r[c])).join(','))].join('\n');
-        mime = 'text/csv'; ext = 'csv';
-      } else {
-        content = rows.map(r => JSON.stringify(r)).join('\n');
-        mime = 'application/jsonl'; ext = 'jsonl';
-      }
-      const blob = new Blob([content], { type: mime });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${filename}.${ext}`; a.click();
-      URL.revokeObjectURL(url);
-    },
-
-    downloadHistoryOutput(format) {
-      this._downloadRows(this.historyOutputRows, this.historyOutputColumns, format, 'output');
     },
 
     get isClaudeModel() {
