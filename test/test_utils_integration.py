@@ -33,7 +33,7 @@ def set_aws_api_key():
         "inference-profile/us.anthropic.claude-sonnet-4-6",
         "amazon.nova-lite-v1:0",
         "amazon.nova-micro-v1:0",
-        "inference-profile/us.anthropic.claude-3-haiku-20240307-v1:0",
+        "inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
     ],
 )
 def test_connect_to_bedrock(model_id: str):
